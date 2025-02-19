@@ -20,6 +20,7 @@ void Dance(void);//跳舞
 void Run(void);//前进
 void LeftRun(void);//左转
 void RightRun(void);//右转
+void BackRun(void);//后退
 
 #endif
 
