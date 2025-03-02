@@ -1,9 +1,9 @@
-//≈‰÷√GPIO
+//ÈÖçÁΩÆGPIO
 	GPIOX_Init(GPIOA,RCC_APB2Periph_GPIOA,GPIO_Speed_10MHz,GPIO_Mode_IN_FLOATING,GPIO_Pin_0|GPIO_Pin_1);
-	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2,ENABLE);//TIM2 πƒ‹
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2,ENABLE);//TIM2‰ΩøËÉΩ
 	
 	
-	TIM_ICInitTypeDef T2;//≤∂ªÒ≥ı ºªØ
+	TIM_ICInitTypeDef T2;//ÊçïËé∑ÂàùÂßãÂåñ
 	T2.TIM_Channel=TIM_Channel_1|TIM_Channel_2;
 	T2.TIM_ICFilter=0xF;
 	T2.TIM_ICPolarity=TIM_ICPolarity_Rising;
@@ -11,7 +11,7 @@
 	T2.TIM_ICSelection=TIM_ICSelection_DirectTI;
 	TIM_ICInit(TIM2, &T2);
 	
-	TIM_TimeBaseInitTypeDef TI2;//≈‰÷√TIM2
+	TIM_TimeBaseInitTypeDef TI2;//ÈÖçÁΩÆTIM2
 	TIM_TimeBaseStructInit(&TI2);
 	TI2.TIM_ClockDivision=TIM_CKD_DIV1;
 	TI2.TIM_CounterMode=TIM_CounterMode_Up;
@@ -19,7 +19,7 @@
 	TI2.TIM_Prescaler=0;
 	TIM_TimeBaseInit(TIM2, &TI2);
 	
-	//±‡¬Î∆˜Ω”ø⁄
+	//ÁºñÁ†ÅÂô®Êé•Âè£
 	TIM_EncoderInterfaceConfig(TIM2, TIM_EncoderMode_TI12,TIM_ICPolarity_Rising,TIM_ICPolarity_Rising);
 	
 	TIM_Cmd(TIM2, ENABLE);
