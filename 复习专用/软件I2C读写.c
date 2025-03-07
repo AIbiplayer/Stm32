@@ -1,3 +1,9 @@
+/**
+ * OELD输出时先初始化引脚再初始化OLED
+ * 想要实现陀螺仪准确测量需要看寄存器手册
+ * 注意等待函数的写法，容易出错
+ */
+
 #include "stm32f10x.h"
 #include "Delay.h"
 #include "GPIOX_Init.h"
