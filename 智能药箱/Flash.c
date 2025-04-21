@@ -10,6 +10,7 @@
  * @brief Flash擦除
  * @param Banks 块1或2
  * @param Pages 页码，块1要64起步，不大于127
+ * @param NPages 擦除个数
  * @param ErrorCode 错误返回代码
  */
 void Flash_Erase(uint32_t Banks, uint32_t Pages, uint32_t NPages, uint32_t ErrorCode)
@@ -28,7 +29,7 @@ void Flash_Erase(uint32_t Banks, uint32_t Pages, uint32_t NPages, uint32_t Error
 
 /**
  * @brief Flash写入
- * @param Address 读取的地址
+ * @param Address 写入的地址
  * @param DataAddress 写入的数据的地址
  */
 void Flash_Write(uint32_t Address, uint32_t DataAddress)

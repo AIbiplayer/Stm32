@@ -11,6 +11,7 @@ extern TIM_HandleTypeDef htim2;
 
 uint8_t While_Cabinet_List[6] = {1, 2, 3, 4, 5, 6};
 
+#define Cabinet_Page 64                                  // 旋转舵机数据所在页数
 #define Cabinet_Address 0x08080000                       // 柜子数据存储在Flash中
 #define TestAngle 345                                    // 5V时舵机角速度，可改变
 #define RotateMotor TIM_CHANNEL_1                        // PA0
@@ -35,6 +36,10 @@ uint16_t Angle_Change(int16_t Angle)
     return Angle * 1000 / TestAngle;
 }
 
+/**
+ * @brief 从Flash读取数据
+ * @param Cabinet 导出的数据指针
+ */
 void Read_Cabinet(uint8_t *Cabinet)
 {
     uint64_t Data = 0;
@@ -43,6 +48,7 @@ void Read_Cabinet(uint8_t *Cabinet)
     {
         Cabinet[i] = Data >> (8 * (5 - i));
     }
+    Flash_Erase(FLASH_BANK_1, 64, 1, 0);
 }
 
 /**
@@ -51,15 +57,26 @@ void Read_Cabinet(uint8_t *Cabinet)
  */
 void Rotate_Motor_Move(uint8_t Cabinet_Num)
 {
-
+    uint64_t WriteData = 0;
     uint8_t Now_Cabinet = While_Cabinet_List[0]; // 当前序号
     HAL_TIM_PWM_Start(&htim2, RotateMotor);
+    Read_Cabinet(While_Cabinet_List);
 
     if (Cabinet_Num - Now_Cabinet == 3 || Cabinet_Num - Now_Cabinet == -3) // 柜子对立面
     {
         ClockWise();
         HAL_Delay(Angle_Change(180));
         Stop(RotateMotor);
+
+        for (uint8_t i = 0; i < 5; i++)
+        {
+            While_Cabinet_List[i] += 3;
+            if (While_Cabinet_List[i] > 6)
+            {
+                While_Cabinet_List[i] -= 6;
+            }
+            WriteData += While_Cabinet_List[i] << (8 * i);
+        }
     }
     // 柜子左2
     else if (((Now_Cabinet != 5 || Now_Cabinet != 6) && (Cabinet_Num - Now_Cabinet == 2)) || (Now_Cabinet == 5 && Cabinet_Num == 1 || Now_Cabinet == 6 && Cabinet_Num == 2))
@@ -67,6 +84,16 @@ void Rotate_Motor_Move(uint8_t Cabinet_Num)
         ClockWise();
         HAL_Delay(Angle_Change(120));
         Stop(RotateMotor);
+
+        for (uint8_t i = 0; i < 5; i++)
+        {
+            While_Cabinet_List[i] += 2;
+            if (While_Cabinet_List[i] > 6)
+            {
+                While_Cabinet_List[i] -= 6;
+            }
+            WriteData += While_Cabinet_List[i] << (8 * i);
+        }
     }
     // 柜子右2
     else if ((Cabinet_Num - Now_Cabinet == 4 || Cabinet_Num - Now_Cabinet == -4) || (Now_Cabinet == 3 && Cabinet_Num == 1 || Now_Cabinet == 4 && Cabinet_Num == 2))
@@ -74,6 +101,16 @@ void Rotate_Motor_Move(uint8_t Cabinet_Num)
         DClockWise();
         HAL_Delay(Angle_Change(120));
         Stop(RotateMotor);
+
+        for (uint8_t i = 0; i < 5; i++)
+        {
+            While_Cabinet_List[i] += 4;
+            if (While_Cabinet_List[i] > 6)
+            {
+                While_Cabinet_List[i] -= 6;
+            }
+            WriteData += While_Cabinet_List[i] << (8 * i);
+        }
     }
     // 柜子右1
     else if (Cabinet_Num - Now_Cabinet == -1 || Cabinet_Num - Now_Cabinet == 5)
@@ -81,6 +118,16 @@ void Rotate_Motor_Move(uint8_t Cabinet_Num)
         DClockWise();
         HAL_Delay(Angle_Change(60));
         Stop(RotateMotor);
+
+        for (uint8_t i = 0; i < 5; i++)
+        {
+            While_Cabinet_List[i] += 1;
+            if (While_Cabinet_List[i] > 6)
+            {
+                While_Cabinet_List[i] -= 6;
+            }
+            WriteData += While_Cabinet_List[i] << (8 * i);
+        }
     }
     // 柜子左1
     else if (Cabinet_Num - Now_Cabinet == 1 || Cabinet_Num - Now_Cabinet == -5)
@@ -88,10 +135,21 @@ void Rotate_Motor_Move(uint8_t Cabinet_Num)
         ClockWise();
         HAL_Delay(Angle_Change(60));
         Stop(RotateMotor);
+
+        for (uint8_t i = 0; i < 5; i++)
+        {
+            While_Cabinet_List[i] += 5;
+            if (While_Cabinet_List[i] > 6)
+            {
+                While_Cabinet_List[i] -= 6;
+            }
+            WriteData += While_Cabinet_List[i] << (8 * i);
+        }
     }
     // 停止
     else if (Cabinet_Num == Now_Cabinet)
     {
         Stop(RotateMotor);
     }
+    Flash_Write(Cabinet_Address, (uint32_t)(&WriteData));
 }

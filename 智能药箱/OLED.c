@@ -13,7 +13,7 @@ void OLED_I2C_Init(void)
     
     GPIO_InitTypeDef GPIO_InitStructure;
     GPIO_InitStructure.Mode = GPIO_MODE_OUTPUT_OD;
-    GPIO_InitStructure.Pin = GPIO_PIN_1 | GPIO_PIN_0;
+    GPIO_InitStructure.Pin = GPIO_PIN_8 | GPIO_PIN_9;
     GPIO_InitStructure.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStructure);
 
