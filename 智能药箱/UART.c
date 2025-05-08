@@ -6,8 +6,8 @@
 #include "string.h"
 #include "main.h"
 #include "UART.h"
+#include "Motor.h"
 #include "stm32u5xx_hal_uart.h"
-#include "stm32u5xx_hal_usart.h"
 
 extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart2;
@@ -26,129 +26,56 @@ const char KeyConnect[] = "AT+MQTTUSERCFG=0,1,\"b0573a46ef944339acb37bda7913cd12
 const char BemfaConnect[] = "AT+MQTTCONN=0,\"bemfa.com\",9501,0\r\n";                                               ///< 连接巴法云平台
 const char CipMode[] = "AT+CIPMODE=1\r\n";                                                                          ///< 透传模式
 
-// 订阅主题，可自由添加
-const char Topic_LED_Connect[] = "AT+MQTTSUB=0,\"Ping\",0\r\n";
-const char Topic_LED_SendCmd[] = "AT+MQTTPUB=0,\"Ping/set\",\"666\",0,0\r\n";
+// 订阅在线状态主题
+const char Topic_Ping_Connect[] = "AT+MQTTSUB=0,\"Ping\",0\r\n";
+const char Topic_Ping_SendCmd[] = "AT+MQTTPUB=0,\"Ping/set\",\"OnlineOK\",0,0\r\n"; // 发送OnlineOK表示收到
+// 订阅药柜温湿度发送主题
+const char Topic_CabinetTH_Connect[] = "AT+MQTTSUB=0,\"CabinetTH\",0\r\n";
+const char Topic_CabinetTH_SendCmd[] = "AT+MQTTPUB=0,\"CabinetTH/set\",\"T25H75\",0,0\r\n"; // 这里传递温湿度
+// 订阅药柜位置接收主题
+const char Topic_CabinetLocation_Connect[] = "AT+MQTTSUB=0,\"CabinetLocation\",0\r\n";
+const char Topic_CabinetLocation_SendCmd[] = "AT+MQTTPUB=0,\"CabinetLocation/set\",\"OpenOK\",0,0\r\n"; // 发送OpenOK表示柜子打开
+// 订阅关闭药柜主题
+const char Topic_CloseCabinet_Connect[] = "AT+MQTTSUB=0,\"CloseCabinet\",0\r\n";
+const char Topic_CloseCabinet_SendCmd[] = "AT+MQTTPUB=0,\"CloseCabinet/set\",\"CloseOK\",0,0\r\n"; // 发送CloseOK表示柜子关闭
+// 订阅冷藏柜温湿度发送主题
+const char Topic_ColdCabinetTH_Connect[] = "AT+MQTTSUB=0,\"ColdCabinetTH\",0\r\n";
+const char Topic_ColdCabinetTH_SendCmd[] = "AT+MQTTPUB=0,\"ColdCabinetTH/set\",\"T10H75\",0,0\r\n"; // 这里传递冷藏柜温湿度
+// 订阅服药提醒主题
+const char Topic_MedicineReminder_Connect[] = "AT+MQTTSUB=0,\"MedicineReminder\",0\r\n";
+// 订阅RTC时钟获取主题
+const char Topic_RTC_Connect[] = "AT+MQTTSUB=0,\"RTC\",0\r\n";
 
 /**
- * @brief 等待指令函数
+ * @brief 总连接函数，连接完亮蓝灯
  */
-uint8_t WaitForACK(void)
+void All_Connect(void)
 {
-    char ReceiveBuff[DMASIZE];
-    strcpy(ReceiveBuff, ReceiveData);
-    uint32_t Time = 100000;
-    while (Time)
+    HAL_Delay(2000);
+    HAL_UART_Transmit(&huart2, (uint8_t *)KeyConnect, strlen(KeyConnect), HAL_MAX_DELAY); // 连接MQTT
+    HAL_Delay(10);
+    HAL_UART_Transmit(&huart2, (uint8_t *)BemfaConnect, strlen(BemfaConnect), HAL_MAX_DELAY); // 连接巴法云
+    HAL_Delay(2500);
+    HAL_UART_Transmit(&huart2, (uint8_t *)CipMode, strlen(CipMode), HAL_MAX_DELAY); // 设置透传
+    HAL_Delay(10);
+    for (int i = 0; i < 4; i++) // 重复订阅主题
     {
-        Time--;
-        if (strstr(ReceiveBuff,"OK") != NULL)
-        {
-            return OK;
-        }
+        HAL_UART_Transmit(&huart2, (uint8_t *)Topic_Ping_Connect, strlen(Topic_Ping_Connect), HAL_MAX_DELAY);
+        HAL_Delay(1000);
+        HAL_UART_Transmit(&huart2, (uint8_t *)Topic_CabinetLocation_Connect, strlen(Topic_CabinetLocation_Connect), HAL_MAX_DELAY);
+        HAL_Delay(1000);
+        HAL_UART_Transmit(&huart2, (uint8_t *)Topic_CabinetTH_Connect, strlen(Topic_CabinetTH_Connect), HAL_MAX_DELAY);
+        HAL_Delay(1000);
+        HAL_UART_Transmit(&huart2, (uint8_t *)Topic_CloseCabinet_Connect, strlen(Topic_CloseCabinet_Connect), HAL_MAX_DELAY);
+        HAL_Delay(1000);
+        HAL_UART_Transmit(&huart2, (uint8_t *)Topic_ColdCabinetTH_Connect, strlen(Topic_ColdCabinetTH_Connect), HAL_MAX_DELAY);
+        HAL_Delay(1000);
+        HAL_UART_Transmit(&huart2, (uint8_t *)Topic_MedicineReminder_Connect, strlen(Topic_MedicineReminder_Connect), HAL_MAX_DELAY);
+        HAL_Delay(1000);
+        HAL_UART_Transmit(&huart2, (uint8_t *)Topic_RTC_Connect, strlen(Topic_RTC_Connect), HAL_MAX_DELAY);
+        HAL_Delay(1000);
     }
-    return Error;
-}
-
-/**
- * @brief 连接WIFI
- */
-ESP_Status Connect_WiFi(void)
-{
-    HAL_Delay(1000);
-    HAL_UART_Transmit_DMA(&huart2, (uint8_t *)WiFiConnect, strlen(WiFiConnect));
-    HAL_Delay(3500);
-    if (WaitForACK() == OK)
-    {
-        return WiFi_OK;
-    }
-    return ESP_ERROR;
-}
-
-/**
- * @brief 连接MQTT
- */
-ESP_Status Connect_MQTT(void)
-{
-    HAL_Delay(200);
-    HAL_UART_Transmit_DMA(&huart2, (uint8_t *)KeyConnect, strlen(KeyConnect));
-    HAL_Delay(200);
-    if (WaitForACK() == OK)
-    {
-        return MQTT_OK;
-    }
-    return ESP_ERROR;
-}
-
-/**
- * @brief 连接巴法云
- */
-ESP_Status Connect_Bemfa(void)
-{
-    HAL_UART_Transmit_DMA(&huart2, (uint8_t *)BemfaConnect, strlen(BemfaConnect));
-    HAL_Delay(3500);
-    if (WaitForACK() == OK)
-    {
-        return Bemfa_OK;
-    }
-    return ESP_ERROR;
-}
-
-/**
- * @brief 设置透传模式
- */
-ESP_Status Send_Cipmode(void)
-{
-    HAL_UART_Transmit_DMA(&huart2, (uint8_t *)CipMode, strlen(CipMode));
-    HAL_Delay(200);
-    if (WaitForACK() == OK)
-    {
-        return CipMode_OK;
-    }
-    return ESP_ERROR;
-}
-
-/**
- * @brief 订阅主题，此处可自由添加
- * @param Topic 主题
- */
-ESP_Status Connect_Topic(void)
-{
-    HAL_UART_Transmit_DMA(&huart2, (uint8_t *)Topic_LED_Connect, strlen(Topic_LED_Connect));
-    HAL_Delay(200);
-    if (WaitForACK() == OK)
-    {
-        return Topic_OK;
-    }
-    return ESP_ERROR;
-}
-
-/**
- * @brief 总连接函数，任意中断则失败
- */
-ESP_Status All_Connect(void)
-{
-    HAL_UART_Receive_DMA(&huart2, (uint8_t *)ReceiveData, 128);
-    if (Connect_WiFi() != WiFi_OK)
-    {
-        return ESP_ERROR;
-    }
-    if (Connect_MQTT() != MQTT_OK)
-    {
-        return ESP_ERROR;
-    }
-    if (Connect_Bemfa() != Bemfa_OK)
-    {
-        return ESP_ERROR;
-    }
-    if (Send_Cipmode() != CipMode_OK)
-    {
-        return ESP_ERROR;
-    }
-    if (Connect_Topic() != Topic_OK)
-    {
-        return ESP_ERROR;
-    }
-    return Online_OK;
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET); // 亮蓝灯
 }
 
 /**
@@ -210,27 +137,57 @@ void Parse_MQTTData(void)
     ReceiveCmd[len] = '\0'; // 确保字符串结束
 }
 
-void Operation(void)
-{
-    if (strcmp(ReceiveTopic, "Ping") == 0 && strcmp(ReceiveCmd, "666"))
-    {
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET); // 绿
-    }
-}
-
 /**
- * @brief 接收函数
+ * @brief 接收数据函数，主要是DMA重启
  */
-void USART2_IRQHandler(void) // 测试用U1，真正用U3
+void USART2_IRQHandler(void)
 {
     if (__HAL_UART_GET_FLAG(&huart2, UART_FLAG_IDLE))
     {
         __HAL_UART_CLEAR_IDLEFLAG(&huart2);
         HAL_UART_DMAStop(&huart2);
-
-        Parse_MQTTData();
-
         HAL_UART_Receive_DMA(&huart2, (uint8_t *)ReceiveData, 128);
     }
     HAL_UART_IRQHandler(&huart2);
+}
+
+/**
+ * @brief 回调处理函数，用于处理数据
+ */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+    if (huart == &huart2)
+    {
+        Parse_MQTTData(); // 解析数据
+
+        if (strcmp(ReceiveTopic, "Ping") == 0 && strcmp(ReceiveCmd, "Ping") == 0) // Ping检测
+        {
+            HAL_UART_Transmit(&huart2, (uint8_t *)Topic_Ping_SendCmd, strlen(Topic_Ping_SendCmd), HAL_MAX_DELAY);
+        }
+
+        else if (strcmp(ReceiveTopic, "CabinetLocation") == 0) // 开柜门识别
+        {
+            if (strcmp(ReceiveCmd, "1") == 0) // 开柜门1
+            {
+                Rotate_Motor_Move(1);
+            }
+            else if (strcmp(ReceiveCmd, "2") == 0) // 开柜门2
+            {
+                Rotate_Motor_Move(2);
+            }
+            else if (strcmp(ReceiveCmd, "3") == 0) // 开柜门3
+            {
+                Rotate_Motor_Move(3);
+            }
+            else if (strcmp(ReceiveCmd, "4") == 0) // 开柜门4
+            {
+                Rotate_Motor_Move(4);
+            }
+            else if (strcmp(ReceiveCmd, "5") == 0) // 开柜门5
+            {
+                Rotate_Motor_Move(5);
+            }
+            HAL_UART_Transmit(&huart2, (uint8_t *)Topic_CabinetLocation_SendCmd, strlen(Topic_CabinetLocation_SendCmd), HAL_MAX_DELAY);
+        }
+    }
 }
