@@ -16,6 +16,7 @@ extern TIM_HandleTypeDef htim2;
  */
 void Rotate_Motor_Move(uint8_t CabinetList)
 {
+    HAL_TIM_PWM_Start(&htim2, RotateMotor);
     if (CabinetList == 1) // 1号柜
     {
         __HAL_TIM_SET_COMPARE(&htim2, RotateMotor, 64);
