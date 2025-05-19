@@ -1,0 +1,26 @@
+{
+    "files.associations": {
+        "stm32u5xx_hal_tim.h": "c",
+        "stm32u5xx_hal_lptim.h": "c",
+        "oled.h": "c",
+        "stm32u5xx_hal.h": "c",
+        "oled_font.h": "c",
+        "stm32u5xx_hal_rtc.h": "c",
+        "stm32u5xx_hal_usart.h": "c",
+        "uart.h": "c",
+        "stm32u5xx_hal_uart.h": "c",
+        "cstdlib": "c",
+        "uart_fputc.h": "c",
+        "stm32u5xx_hal_flash.h": "c",
+        "dht11.h": "c",
+        "main.h": "c",
+        "format": "c",
+        "numeric": "c",
+        "streambuf": "c",
+        "system_error": "c",
+        "text_encoding": "c",
+        "tuple": "c",
+        "variant": "c",
+        "cstdint": "c"
+    }
+}
