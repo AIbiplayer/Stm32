@@ -7,32 +7,18 @@
 #include "main.h"
 #include "UART.h"
 
+extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart2;
 extern LPTIM_HandleTypeDef hlptim1;
 
-/*     字符串后要添加0x00，不然指针会越界导致读取别的内容      */
-// 药柜温湿度读取失败语音
-const char Voice_NError[] = {0xD2, 0xA9, 0xB9, 0xF1, 0xCE, 0xC2, 0xCA, 0xAA, 0xB6, 0xC8, 0xB6, 0xC1, 0xC8, 0xA1, 0xCA, 0xA7, 0xB0, 0xDC, 0x00};
-// 药柜温度过高语音
-const char Voice_NTemp_High[] = {0xC7, 0xEB, 0xD7, 0xA2, 0xD2, 0xE2, 0xA3, 0xAC, 0xD2, 0xA9, 0xB9, 0xF1, 0xCE, 0xC2, 0xB6, 0xC8, 0xB9, 0xFD, 0xB8, 0xDF, 0x00};
-// 药柜湿度过高语音
-const char Voice_NHumid_High[] = {0xC7, 0xEB, 0xD7, 0xA2, 0xD2, 0xE2, 0xA3, 0xAC, 0xD2, 0xA9, 0xB9, 0xF1, 0xCA, 0xAA, 0xB6, 0xC8, 0xB9, 0xFD, 0xB8, 0xDF, 0x00};
-// 药柜温湿度均过高语音
-const char Voice_NTH_High[] = {0xC7, 0xEB, 0xD7, 0xA2, 0xD2, 0xE2, 0xA3, 0xAC, 0xD2, 0xA9, 0xB9, 0xF1, 0xCE, 0xC2, 0xCA, 0xAA, 0xB6, 0xC8, 0xBE, 0xF9, 0xB9, 0xFD, 0xB8, 0xDF, 0x00};
-
-// 冷藏柜温湿度读取失败语音
-const char Voice_CError[] = {0xC0, 0xE4, 0xB2, 0xD8, 0xB9, 0xF1, 0xCE, 0xC2, 0xCA, 0xAA, 0xB6, 0xC8, 0xB6, 0xC1, 0xC8, 0xA1, 0xCA, 0xA7, 0xB0, 0xDC, 0x00};
-// 冷藏柜温度过高语音
-const char Voice_CTemp_High[] = {0xC7, 0xEB, 0xD7, 0xA2, 0xD2, 0xE2, 0xA3, 0xAC, 0xC0, 0xE4, 0xB2, 0xD8, 0xB9, 0xF1, 0xCE, 0xC2, 0xB6, 0xC8, 0xB9, 0xFD, 0xB8, 0xDF, 0x00};
-// 冷藏柜湿度过高语音
-const char Voice_CHumid_High[] = {0xC7, 0xEB, 0xD7, 0xA2, 0xD2, 0xE2, 0xA3, 0xAC, 0xC0, 0xE4, 0xB2, 0xD8, 0xB9, 0xF1, 0xCA, 0xAA, 0xB6, 0xC8, 0xB9, 0xFD, 0xB8, 0xDF, 0x00};
-// 冷藏柜温湿度均过高语音
-const char Voice_CTH_High[] = {0xC7, 0xEB, 0xD7, 0xA2, 0xD2, 0xE2, 0xA3, 0xAC, 0xC0, 0xE4, 0xB2, 0xD8, 0xB9, 0xF1, 0xCE, 0xC2, 0xCA, 0xAA, 0xB6, 0xC8, 0xBE, 0xF9, 0xB9, 0xFD, 0xB8, 0xDF, 0x00};
+uint8_t Voice_Status = 0;      ///< 语音状态，为1时不播报，由LPTIM1控制
+uint8_t LPTIM1_Repeat = 0;     ///< LPTIM1计时重复次数
+uint8_t Temp = 25, Humid = 75; /// <温湿度
 
 /**
  * @brief DHT11延迟函数，采用DWT计数器
  */
-static void DHT11_Delay_us(uint32_t us)
+void DHT11_Delay_us(uint32_t us)
 {
     uint32_t start = DWT->CYCCNT;
     uint32_t cycles = us * (SystemCoreClock / 1000000);
@@ -187,14 +173,12 @@ HAL_StatusTypeDef DHT11_Read_Data(DHT11_TypeDef *dht, uint8_t *temp, uint8_t *hu
 
 /**
  * @brief DHT11读取数据并操作，默认正常柜为PC3，冷藏柜为PB0
- * @param LPRepeat 重复次数判断，每7秒播报一次语音
  */
-void DHT11_Operation(uint8_t LPRepeat)
+void DHT11_Operation(void)
 {
     DHT11_TypeDef DHT11_C3; ///< 正常柜
     DHT11_C3.GPIOx = GPIOC;
     DHT11_C3.GPIO_Pin = GPIO_PIN_3;
-    uint8_t Temp = 25, Humid = 75;
 
     DHT11_TypeDef DHT11_B0; ///< 冷藏柜
     DHT11_B0.GPIOx = GPIOB;
@@ -203,73 +187,37 @@ void DHT11_Operation(uint8_t LPRepeat)
     // 药柜读取失败发送Error，读取成功发送温湿度
     if (DHT11_Read_Data(&DHT11_C3, &Temp, &Humid) != HAL_OK)
     {
-        if (LPRepeat == 1)
-        {
-            Voice_Remind(Voice_NError);
-        }
         Uart_printf(&huart2, "AT+MQTTPUB=0,\"CabinetTH/set\",\"Error\",0,0\r\n");
     }
     else
     {
         Uart_printf(&huart2, "AT+MQTTPUB=0,\"CabinetTH/set\",\"T%dH%d\",0,0\r\n", Temp, Humid);
-
-        if (LPRepeat == 1) // 药柜温湿度警报
-        {
-            if (Temp > 25 && Humid < 75)
-            {
-                Voice_Remind(Voice_NTemp_High);
-            }
-            else if (Temp < 25 && Humid > 75)
-            {
-                Voice_Remind(Voice_NHumid_High);
-            }
-            else if (Temp > 25 && Humid > 75)
-            {
-                Voice_Remind(Voice_NTH_High);
-            }
-        }
     }
+
+    Uart_printf(&huart1, "Temp:%d\nHumid:%d", Temp, Humid);
+
     // 冷藏柜读取失败发送Error，读取成功发送温湿度
     if (DHT11_Read_Data(&DHT11_B0, &Temp, &Humid) != HAL_OK)
     {
-        if (LPRepeat == 1)
-        {
-            Voice_Remind(Voice_CError);
-        }
         Uart_printf(&huart2, "AT+MQTTPUB=0,\"ColdCabinetTH/set\",\"Error\",0,0\r\n");
     }
     else
     {
         Uart_printf(&huart2, "AT+MQTTPUB=0,\"ColdCabinetTH/set\",\"T%dH%d\",0,0\r\n", Temp, Humid);
-        if (LPRepeat == 1) // 冷藏柜温湿度警报
-        {
-            if (Temp > 25 && Humid < 75)
-            {
-                Voice_Remind(Voice_CTemp_High);
-            }
-            else if (Temp < 25 && Humid > 75)
-            {
-                Voice_Remind(Voice_CHumid_High);
-            }
-            else if (Temp > 25 && Humid > 75)
-            {
-                Voice_Remind(Voice_CTH_High);
-            }
-        }
     }
 }
 
 /**
- * @brief 使用LPTIM1进行中断，每10秒检测并语音播报一次
+ * @brief 使用LPTIM1进行中断，每秒检测并语音播报一次
  */
 void LPTIM1_IRQHandler(void)
 {
-    static uint8_t LPRepeat = 1;
-    LPRepeat++;
-    if (LPRepeat == 10)
+    LPTIM1_Repeat++;
+    if (LPTIM1_Repeat == 10)
     {
-        LPRepeat = 0;
+        Voice_Status = 0;
+        LPTIM1_Repeat = 0;
     }
-    DHT11_Operation(LPRepeat);
+    DHT11_Operation();
     HAL_LPTIM_IRQHandler(&hlptim1);
 }

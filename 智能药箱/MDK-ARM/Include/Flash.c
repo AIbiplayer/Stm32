@@ -8,7 +8,6 @@
 
 #define BANK1_ADDRESS 0x08080000        ///< Bank1地址，64页起步
 #define BANK2_ADDRESS 0x08100000        ///< Bank2地址，0页起步
-#define RTC_Alarm_ADDRESS 0x08082000    ///< Bank1的第65页地址，此页用于存放服药闹钟提醒
 
 /**
  * @brief Flash擦除
@@ -52,7 +51,7 @@ void Flash_Write(uint32_t Address, uint32_t DataAddress)
  * @param ReadData 转运的地址
  * @param Address 读取数据的地址
  */
-void Flash_Read(uint32_t *ReadData, uint32_t Address)
+void Flash_Read(uint64_t *ReadData, uint32_t Address)
 {
-    *ReadData = *(__IO uint32_t *)Address;
+    *ReadData = *(__IO uint64_t *)Address;
 }

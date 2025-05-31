@@ -8,6 +8,6 @@
 
 void Flash_Erase(uint32_t Banks, uint32_t Page, uint32_t NPages);
 void Flash_Write(uint32_t Address, uint32_t DataAddress);
-void Flash_Read(uint32_t *ReadData, uint32_t Address);
+void Flash_Read(uint64_t *ReadData, uint32_t Address);
 
 #endif

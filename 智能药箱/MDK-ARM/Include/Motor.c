@@ -83,7 +83,7 @@ void Rotate_Motor_Down(void)
  */
 void Motor_Operation(uint8_t *List)
 {
-    Flash_Read((uint32_t *)&Read_Motor_Status, Motor_Status_ADDRESS); // 通过读取Flash判断柜门状态
+    Flash_Read((uint64_t *)&Read_Motor_Status, Motor_Status_ADDRESS); // 通过读取Flash判断柜门状态
     if (*List >= 1 && *List <= 5)
     {
         if (strcmp(Read_Motor_Status, "O") == 0)

@@ -8,9 +8,11 @@
 #include "stdio.h"
 #include "string.h"
 #include "main.h"
+#include "DHT11.h"
 #include "UART.h"
 #include "RTC.h"
 #include "Motor.h"
+#include "Flash.h"
 #include "stm32u5xx_hal_uart.h"
 
 extern UART_HandleTypeDef huart1;
@@ -20,7 +22,7 @@ extern RTC_HandleTypeDef hrtc;
 extern RTC_DateTypeDef sDate;
 extern RTC_TimeTypeDef sTime;
 
-#define DMASIZE 512 ///< 最大长度512
+#define DMASIZE 1024 ///< 最大长度1024
 
 char ReceiveData[DMASIZE] = {0}; ///< 接收的原始数据
 char ReceiveCmd[512] = {0};      ///< 处理后的指令
@@ -50,6 +52,7 @@ const char Topic_ColdCabinetTH_Connect[] = "AT+MQTTSUB=0,\"ColdCabinetTH\",0\r\n
 const char Topic_ColdCabinetTH_SendCmd[] = "AT+MQTTPUB=0,\"ColdCabinetTH/set\",\"T10H75\",0,0\r\n"; // 这里传递冷藏柜温湿度
 // 订阅服药提醒主题
 const char Topic_MedicineReminder_Connect[] = "AT+MQTTSUB=0,\"MedicineReminder\",0\r\n";
+const char Topic_MedicineReminder_SendCmd[] = "AT+MQTTPUB=0,\"MedicineReminder/set\",\"CleanOK\",0,0\r\n"; // 这里传递成功清除服药数据
 // 订阅RTC时钟获取主题
 const char Topic_RTC_Connect[] = "AT+MQTTSUB=0,\"RTC\",0\r\n";
 
@@ -71,6 +74,7 @@ void Uart_printf(UART_HandleTypeDef *huart, char *format, ...)
  */
 void All_Connect(void)
 {
+
     HAL_UART_Receive_DMA(&huart2, (uint8_t *)ReceiveData, DMASIZE);
     HAL_Delay(2000);
     HAL_UART_Transmit(&huart2, (uint8_t *)KeyConnect, strlen(KeyConnect), HAL_MAX_DELAY); // 连接MQTT
@@ -104,68 +108,84 @@ void All_Connect(void)
  */
 void Parse_MQTTData(void)
 {
-    char *p = ReceiveData; // 指向原始数据
-    char *topicStart, *topicEnd, *dataStart;
+    char *p = ReceiveData;
+    char *topicStart, *dataStart;
     int len = 0;
+    int isFirstTopic = 1;
+    int isFirstCmd = 1;
 
-    // 检查是否以 "+MQTTSUBRECV:" 开头
-    if (strncmp(p, "+MQTTSUBRECV:", 12) != 0)
+    ReceiveTopic[0] = '\0';
+    ReceiveCmd[0] = '\0';
+
+    while (*p != '\0')
     {
-        return; // 不是MQTT订阅消息，直接返回
-    }
-    p += 12; // 跳过 "+MQTTSUBRECV:"
+        // 查找"+MQTTSUBRECV:"
+        if (strncmp(p, "+MQTTSUBRECV:", 13) != 0)
+        {
+            p++;
+            continue;
+        }
+        p += 13; // 跳过"+MQTTSUBRECV:"
 
-    // 跳过第一个数字（消息ID）
-    while (*p != ',' && *p != '\0')
-        p++;
-    if (*p == '\0')
-        return; // 格式错误
-    p++;        // 跳过逗号
+        // 跳过消息ID
+        while (*p != ',' && *p != '\0')
+            p++;
+        if (*p == '\0')
+            break;
+        p++; // 跳过逗号
 
-    // 提取主题（位于双引号之间）
-    if (*p == '"')
-    {
-        topicStart = ++p; // 跳过第一个引号
+        // 提取主题
+        if (*p != '"')
+            break;
+        topicStart = ++p;
         while (*p != '"' && *p != '\0')
             p++;
         if (*p == '\0')
-            return; // 格式错误
-        topicEnd = p;
-        p++; // 跳过第二个引号
+            break;
+        *p++ = '\0'; // 临时终止字符串
+
+        // 检查主题是否已存在
+        if (strstr(ReceiveTopic, topicStart) == NULL)
+        {
+            if (!isFirstTopic)
+                strncat(ReceiveTopic, "|", 511 - strlen(ReceiveTopic));
+            strncat(ReceiveTopic, topicStart, 511 - strlen(ReceiveTopic));
+            isFirstTopic = 0;
+        }
+        *(p - 1) = '"'; // 恢复引号
+
+        // 跳过逗号和长度字段
+        while (*p != ',' && *p != '\0')
+            p++;
+        if (*p == '\0')
+            break;
+        p++;
+        while (*p != ',' && *p != '\0')
+            p++;
+        if (*p == '\0')
+            break;
+        p++;
+
+        // 提取数据
+        dataStart = p;
+        while (*p != '\r' && *p != '\n' && *p != '\0')
+            p++;
+        len = p - dataStart;
+
+        if (!isFirstCmd)
+            strncat(ReceiveCmd, "|", 511 - strlen(ReceiveCmd));
+        isFirstCmd = 0;
+
+        if (len > 0)
+        {
+            int remain = 511 - strlen(ReceiveCmd);
+            strncat(ReceiveCmd, dataStart, len > remain ? remain : len);
+        }
+
+        // 跳过换行符
+        while ((*p == '\r' || *p == '\n') && *p != '\0')
+            p++;
     }
-    else
-    {
-        return; // 格式错误
-    }
-
-    // 复制主题到 ReceiveTopic
-    len = topicEnd - topicStart;
-    if (len >= 512)
-        len = 511; // 防止溢出
-    strncpy(ReceiveTopic, topicStart, len);
-    ReceiveTopic[len] = '\0'; // 确保字符串结束
-
-    // 跳过逗号和长度字段（直接跳到最后一个逗号）
-    while (*p != ',' && *p != '\0')
-        p++;
-    if (*p == '\0')
-        return; // 格式错误
-    p++;        // 跳过逗号
-    while (*p != ',' && *p != '\0')
-        p++;
-    if (*p == '\0')
-        return; // 格式错误
-    p++;        // 跳过逗号
-
-    // 提取消息（去除末尾的\r\n或其他非可见字符）
-    dataStart = p;
-    while (*p != '\r' && *p != '\n' && *p != '\0')
-        p++;
-    len = p - dataStart; // 计算消息实际长度（到\r或\n前）
-    if (len >= 512)
-        len = 511; // 防止溢出
-    strncpy(ReceiveCmd, dataStart, len);
-    ReceiveCmd[len] = '\0'; // 确保字符串结束
 }
 
 /**
@@ -182,29 +202,29 @@ void USART2_IRQHandler(void)
         if (strcmp(ReceiveTopic, "") != 0 && strcmp(ReceiveCmd, "") != 0)
         {
             // Ping检测
-            if (strcmp(ReceiveTopic, "Ping") == 0 && strcmp(ReceiveCmd, "Ping") == 0)
+            if (strstr(ReceiveTopic, "Ping") != 0 && strstr(ReceiveCmd, "Ping") != 0)
             {
                 HAL_UART_Transmit(&huart2, (uint8_t *)Topic_Ping_SendCmd, strlen(Topic_Ping_SendCmd), HAL_MAX_DELAY);
             }
-            else if (strcmp(ReceiveTopic, "CabinetLocation") == 0) // 开柜门识别
+            if (strstr(ReceiveTopic, "CabinetLocation") != 0) // 开柜门识别
             {
-                if (strcmp(ReceiveCmd, "1") == 0) // 开柜门1
+                if (strstr(ReceiveCmd, "1") != 0) // 开柜门1
                 {
                     Cabinet_List = 1;
                 }
-                else if (strcmp(ReceiveCmd, "2") == 0) // 开柜门2
+                else if (strstr(ReceiveCmd, "2") != 0) // 开柜门2
                 {
                     Cabinet_List = 2;
                 }
-                else if (strcmp(ReceiveCmd, "3") == 0) // 开柜门3
+                else if (strstr(ReceiveCmd, "3") != 0) // 开柜门3
                 {
                     Cabinet_List = 3;
                 }
-                else if (strcmp(ReceiveCmd, "4") == 0) // 开柜门4
+                else if (strstr(ReceiveCmd, "4") != 0) // 开柜门4
                 {
                     Cabinet_List = 4;
                 }
-                else if (strcmp(ReceiveCmd, "5") == 0) // 开柜门5
+                else if (strstr(ReceiveCmd, "5") != 0) // 开柜门5
                 {
                     Cabinet_List = 5;
                 }
@@ -212,7 +232,7 @@ void USART2_IRQHandler(void)
             }
 
             // RTC修改
-            else if (strcmp(ReceiveTopic, "RTC") == 0)
+            if (strstr(ReceiveTopic, "RTC") != 0)
             {
                 if (ParseAndSetRTC(ReceiveCmd) == HAL_OK)
                 {
@@ -220,8 +240,25 @@ void USART2_IRQHandler(void)
                 }
             }
 
+            // 设置闹钟
+            if (strstr(ReceiveTopic, "MedicineReminder") != 0)
+            {
+                if (strstr(ReceiveCmd, "Clean") != 0)
+                {
+                    uint8_t WriteData = 0;
+                    Flash_Erase(FLASH_BANK_1, 65, 1);
+                    Flash_Write(0x08082000, (uint32_t)&WriteData);
+                    Flash_Erase(FLASH_BANK_1, 66, 1);
+                    HAL_RTC_DeactivateAlarm(&hrtc, RTC_ALARM_A);
+                }
+                else
+                {
+                    Alarm_Operation();
+                }
+            }
+
             // 关闭柜子
-            else if (strcmp(ReceiveTopic, "CloseCabinet") == 0)
+            if (strstr(ReceiveTopic, "CloseCabinet") != 0)
             {
                 Cabinet_List = 6;
                 HAL_UART_Transmit(&huart2, (uint8_t *)Topic_CloseCabinet_SendCmd, strlen(Topic_CloseCabinet_SendCmd), HAL_MAX_DELAY);
@@ -229,6 +266,7 @@ void USART2_IRQHandler(void)
             strcpy(ReceiveCmd, "");
             strcpy(ReceiveTopic, "");
         }
+        memset(ReceiveData, 0, DMASIZE);
         HAL_UART_DMAStop(&huart2);
         HAL_UART_Receive_DMA(&huart2, (uint8_t *)ReceiveData, DMASIZE);
         HAL_UART_IRQHandler(&huart2);
@@ -241,5 +279,10 @@ void USART2_IRQHandler(void)
  */
 void Voice_Remind(const char *String)
 {
-    Uart_printf(&huart3, "%s", String);
+    if (Voice_Status == 0)
+    {
+        Uart_printf(&huart3, "%s", String);
+        Voice_Status = 1;
+        LPTIM1_Repeat = 0;
+    }
 }

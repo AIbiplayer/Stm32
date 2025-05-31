@@ -21,6 +21,11 @@
         "text_encoding": "c",
         "tuple": "c",
         "variant": "c",
-        "cstdint": "c"
+        "cstdint": "c",
+        "stdlib.h": "c",
+        "stm32u5xx_hal_iwdg.h": "c",
+        "grb.h": "c",
+        "hc_sr04.h": "c",
+        "time.h": "c"
     }
 }
