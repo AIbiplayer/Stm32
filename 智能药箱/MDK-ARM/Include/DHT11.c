@@ -9,11 +9,14 @@
 
 extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart2;
-extern LPTIM_HandleTypeDef hlptim1;
+extern TIM_HandleTypeDef htim5;
+extern uint8_t Online_Status;
 
-uint8_t Voice_Status = 0;      ///< 语音状态，为1时不播报，由LPTIM1控制
-uint8_t LPTIM1_Repeat = 0;     ///< LPTIM1计时重复次数
-uint8_t Temp = 25, Humid = 75; /// <温湿度
+uint8_t Voice_Status = 0;      ///< 语音状态，为1时不播报，由TIM5控制
+uint8_t TIM5_Repeat = 0;       ///< TIM5计时重复次数
+uint8_t Temp = 25, Humid = 75; ///< 温湿度
+
+const char Voice_Online_Error[] = {0xCD, 0xF8, 0xC2, 0xE7, 0xC1, 0xAC, 0xBD, 0xD3, 0xD2, 0xEC, 0xB3, 0xA3, 0x00}; ///< 网络连接异常
 
 /**
  * @brief DHT11延迟函数，采用DWT计数器
@@ -70,7 +73,7 @@ void DHT11_Rst(DHT11_TypeDef *dht)
 {
     DHT11_IO_OUT(dht);     // SET OUTPUT
     DHT11_LOW(dht);        // 拉低DQ
-    DHT11_Delay_us(20000); // 拉低至少18ms
+    DHT11_Delay_us(19000); // 拉低至少18ms
     DHT11_HIGH(dht);       // DQ=1
     DHT11_Delay_us(30);    // 主机拉高20~40us
 }
@@ -194,8 +197,6 @@ void DHT11_Operation(void)
         Uart_printf(&huart2, "AT+MQTTPUB=0,\"CabinetTH/set\",\"T%dH%d\",0,0\r\n", Temp, Humid);
     }
 
-    Uart_printf(&huart1, "Temp:%d\nHumid:%d", Temp, Humid);
-
     // 冷藏柜读取失败发送Error，读取成功发送温湿度
     if (DHT11_Read_Data(&DHT11_B0, &Temp, &Humid) != HAL_OK)
     {
@@ -208,16 +209,30 @@ void DHT11_Operation(void)
 }
 
 /**
- * @brief 使用LPTIM1进行中断，每秒检测并语音播报一次
+ * @brief 使用TIM5进行中断，每1秒检测，每10秒语音播报一次，每60秒检测网络一次
  */
-void LPTIM1_IRQHandler(void)
+void TIM5_IRQHandler(void)
 {
-    LPTIM1_Repeat++;
-    if (LPTIM1_Repeat == 10)
+    static uint8_t Online_Repeat = 0; // 网络检测
+    static uint8_t Online_Number = 0; // 网络检测次数
+    TIM5_Repeat++;
+    if (TIM5_Repeat == 10)
     {
+        Online_Repeat++;
         Voice_Status = 0;
-        LPTIM1_Repeat = 0;
+        TIM5_Repeat = 0;
+    }
+    if (Online_Repeat == 6 && Online_Number == 0)
+    {
+        Online_Status = 0;
+        Online_Number = 1;
+        Online_Repeat = 0;
+    }
+    else if (Online_Repeat == 6 && Online_Number != 0 && Online_Status == 0)
+    {
+        Online_Number = 0;
+        Voice_Remind(Voice_Online_Error);
     }
     DHT11_Operation();
-    HAL_LPTIM_IRQHandler(&hlptim1);
+    HAL_TIM_IRQHandler(&htim5);
 }

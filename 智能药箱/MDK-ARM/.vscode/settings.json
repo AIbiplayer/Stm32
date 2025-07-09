@@ -26,6 +26,10 @@
         "stm32u5xx_hal_iwdg.h": "c",
         "grb.h": "c",
         "hc_sr04.h": "c",
-        "time.h": "c"
+        "time.h": "c",
+        "rtc.h": "c",
+        "oled_7.h": "c",
+        "flash.h": "c",
+        "font.h": "c"
     }
 }

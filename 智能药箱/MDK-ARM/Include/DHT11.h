@@ -16,7 +16,7 @@ typedef struct
 } DHT11_TypeDef;
 
 extern uint8_t Voice_Status;
-extern uint8_t LPTIM1_Repeat;
+extern uint8_t TIM5_Repeat;
 
 // 默认使用PC3口（保持向后兼容）
 #define DHT11_DEFAULT {GPIOC, GPIO_PIN_3}

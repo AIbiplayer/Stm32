@@ -78,7 +78,7 @@ void GRB_Send(void)
     HAL_TIM_PWM_Stop_DMA(&htim4, TIM_CHANNEL_1);
     __HAL_TIM_SetCounter(&htim4, 0);
     HAL_TIM_PWM_Start_DMA(&htim4, TIM_CHANNEL_1, (uint32_t *)LED_Array, sizeof(LED_Array) / sizeof(uint8_t));
-    DHT11_Delay_us(1);
+    HAL_Delay(1);
 }
 
 /**
@@ -217,22 +217,54 @@ void GRB_Medicine_Successful(void)
  */
 void GRB_Distance_Breath(HSV *Color, float Distance)
 {
-    if (Distance > 0.1f && Distance < 450.0f)
+    static uint8_t Distance_Status = 0; // 距离状态位，防止重复执行
+    GRB GRB_Color = {0};
+
+    if (Distance > 0.1f && Distance < 100.0f && Distance_Status == 0) // 离近变亮
     {
-        GRB GRB_Color = {0};
-
-        Color->V = 0.005f / (Distance * 0.001f);
-        HSV_To_GRB(Color, &GRB_Color);
-
-        for (uint8_t i = 0; i < 60; i++)
+        for (uint16_t k = 0; k < BREATH_STEPS; k++)
         {
-            GRB_Write(i, GRB_Color);
+            float t = (float)k / (BREATH_STEPS - 1);
+            Color->V = t * t;
+            if (Color->V < 0.01f) // 亮度最小值
+            {
+                Color->V = 0.01f;
+            }
+            HSV_To_GRB(Color, &GRB_Color);
+
+            for (uint8_t i = 0; i < 60; i++)
+            {
+                GRB_Write(i, GRB_Color);
+            }
+            GRB_Send();
+            HAL_Delay(70);
         }
-        GRB_Send();
+        Distance_Status = 1;
     }
-    else if (Distance > 500.0f && Distance < 1000.0f)
+    else if (Distance > 100.0f && Distance < 450.0f && Distance_Status) // 离远变暗
     {
-        GRB GRB_Color = {0};
+        for (uint16_t k = 0; k < BREATH_STEPS; k++)
+        {
+
+            float t = (float)k / (BREATH_STEPS - 1);
+            Color->V = 1.0f - t * t;
+            if (Color->V < 0.01f) // 亮度最小值
+            {
+                Color->V = 0.01f;
+            }
+            HSV_To_GRB(Color, &GRB_Color);
+
+            for (uint8_t i = 0; i < 60; i++)
+            {
+                GRB_Write(i, GRB_Color);
+            }
+            GRB_Send();
+            HAL_Delay(70);
+            Distance_Status = 0;
+        }
+    }
+    else if (Distance > 500.0f && Distance < 1000.0f && Distance_Status)
+    {
 
         Color->V = 0.01f;
         HSV_To_GRB(Color, &GRB_Color);
@@ -242,14 +274,16 @@ void GRB_Distance_Breath(HSV *Color, float Distance)
             GRB_Write(i, GRB_Color);
         }
         GRB_Send();
+        Distance_Status = 0;
     }
 }
 
 /**
- * @brief 按键上沿触发夜间开关灯(PG0)
+ * @brief 按键上沿触发夜间开关灯(PD1)
  */
-void EXTI0_IRQHandler(void)
+void EXTI8_IRQHandler(void)
 {
+
     Light_Status = !Light_Status;
     if (Light_Status == 1) // 开灯红灯亮，关灯红灯灭
     {
@@ -259,37 +293,5 @@ void EXTI0_IRQHandler(void)
     {
         HAL_GPIO_WritePin(GPIOG, GPIO_PIN_2, GPIO_PIN_RESET);
     }
-    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_0);
-}
-
-/**
- * @brief 光敏传感器，看门狗值在3200~3600间，生成时注意查看
- */
-void ADC4_IRQHandler(void)
-{
-    if (Light_Status == 1 && AWDG_Status == 0)
-    {
-        if (ADC_Light_Data > 3600) // 夜晚判定，蓝灯亮
-        {
-            Day_Night_Status = 1;
-            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);
-        }
-        else if (ADC_Light_Data < 3200) // 白天判定，蓝灯灭
-        {
-            Day_Night_Status = 0;
-            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
-        }
-        AWDG_Status = 1;
-        __HAL_ADC_DISABLE_IT(&hadc4, ADC_IT_AWD);
-    }
-    HAL_ADC_IRQHandler(&hadc4);
-}
-
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
-{
-    if (ADC_Light_Data >= 3200 && ADC_Light_Data <= 3600)
-    {
-        AWDG_Status = 0;
-        __HAL_ADC_ENABLE_IT(&hadc4, ADC_IT_AWD);
-    }
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_8);
 }

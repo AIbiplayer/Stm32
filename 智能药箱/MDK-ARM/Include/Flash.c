@@ -47,7 +47,7 @@ void Flash_Write(uint32_t Address, uint32_t DataAddress)
 }
 
 /**
- * @brief Flash读取
+ * @brief Flash读取（必须64字节读取）
  * @param ReadData 转运的地址
  * @param Address 读取数据的地址
  */

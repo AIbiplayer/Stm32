@@ -29,8 +29,6 @@ medicinebox/rtc_1.o: ..\Core\Src\rtc.c ..\Core\Inc\rtc.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_adc_ex.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_flash.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_flash_ex.h \
-  ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_lptim.h \
-  ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_ll_lptim.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_pwr.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_pwr_ex.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_rtc.h \

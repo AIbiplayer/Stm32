@@ -1,4 +1,6 @@
-medicinebox/oled.o: Include\OLED.c \
+medicinebox/oled.o: Include\oled.c Include\oled.h Include\font.h \
+  F:\Keil\ 5\ARM\ARMCLANG\include\stdint.h \
+  F:\Keil\ 5\ARM\ARMCLANG\include\string.h ..\Core\Inc\main.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal.h \
   ..\Core\Inc\stm32u5xx_hal_conf.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_rcc.h \
@@ -6,7 +8,6 @@ medicinebox/oled.o: Include\OLED.c \
   ..\Drivers\CMSIS\Device\ST\STM32U5xx\Include\stm32u5xx.h \
   ..\Drivers\CMSIS\Device\ST\STM32U5xx\Include\stm32u575xx.h \
   ..\Drivers\CMSIS\Include\core_cm33.h \
-  F:\Keil\ 5\ARM\ARMCLANG\include\stdint.h \
   g:\Stm32CubeMX\Project\MedicineBox\Drivers\CMSIS\Include\cmsis_version.h \
   g:\Stm32CubeMX\Project\MedicineBox\Drivers\CMSIS\Include\cmsis_compiler.h \
   g:\Stm32CubeMX\Project\MedicineBox\Drivers\CMSIS\Include\cmsis_armclang.h \
@@ -29,8 +30,8 @@ medicinebox/oled.o: Include\OLED.c \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_adc_ex.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_flash.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_flash_ex.h \
-  ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_lptim.h \
-  ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_ll_lptim.h \
+  ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_i2c.h \
+  ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_i2c_ex.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_pwr.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_pwr_ex.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_rtc.h \
@@ -41,4 +42,4 @@ medicinebox/oled.o: Include\OLED.c \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_uart_ex.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_exti.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_fmac.h \
-  Include\OLED_Font.h
+  ..\Core\Inc\i2c.h F:\Keil\ 5\ARM\ARMCLANG\include\stdlib.h

@@ -29,8 +29,8 @@ medicinebox/main.o: ..\Core\Src\main.c ..\Core\Inc\main.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_adc_ex.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_flash.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_flash_ex.h \
-  ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_lptim.h \
-  ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_ll_lptim.h \
+  ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_i2c.h \
+  ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_i2c_ex.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_pwr.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_pwr_ex.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_rtc.h \
@@ -42,7 +42,9 @@ medicinebox/main.o: ..\Core\Src\main.c ..\Core\Inc\main.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_exti.h \
   ..\Drivers\STM32U5xx_HAL_Driver\Inc\stm32u5xx_hal_fmac.h \
   ..\Core\Inc\adc.h ..\Core\Inc\fmac.h ..\Core\Inc\gpdma.h \
-  ..\Core\Inc\icache.h ..\Core\Inc\lptim.h ..\Core\Inc\rtc.h \
+  ..\Core\Inc\i2c.h ..\Core\Inc\icache.h ..\Core\Inc\rtc.h \
   ..\Core\Inc\tim.h ..\Core\Inc\usart.h ..\Core\Inc\gpio.h \
-  Include\UART.h Include\Flash.h Include\Motor.h Include\DHT11.h \
-  Include\GRB.h Include\HC_SR04.h
+  Include\UART.h Include\oled.h Include\font.h \
+  F:\Keil\ 5\ARM\ARMCLANG\include\string.h Include\Flash.h \
+  Include\Motor.h Include\DHT11.h Include\GRB.h Include\HC_SR04.h \
+  Include\Key.h Include\RTC_Medicine.h
