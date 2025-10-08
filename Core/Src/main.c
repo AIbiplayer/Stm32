@@ -27,7 +27,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "BlueTooth.h"
 #include "OLED.h"
+#include "mpu6050.h"
 
 /* USER CODE END Includes */
 
@@ -101,6 +103,8 @@ int main(void)
     /* USER CODE BEGIN 2 */
 
     OLED_Init();
+    MPU6050_Init();
+    Uart_Init();
 
     /* USER CODE END 2 */
 
@@ -108,7 +112,6 @@ int main(void)
     /* USER CODE BEGIN WHILE */
     while (1)
     {
-        OLED_ShowString(1, 1, "Hello");
         /* USER CODE END WHILE */
 
         /* USER CODE BEGIN 3 */

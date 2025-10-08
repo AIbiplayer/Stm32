@@ -7,10 +7,7 @@
 #ifndef __GIMBAL_H__
 #define __GIMBAL_H__
 
-#include "main.h"
-
 void Gimbal_Init(void);
-void calibrate_GZ(void);
-void kalmanFilter(void);
+void KalmanFilter(void);
 
 #endif // __GIMBAL_H__

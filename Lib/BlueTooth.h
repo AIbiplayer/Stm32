@@ -9,6 +9,8 @@
 
 #include "main.h"
 
+#define RX_BUFF_SIZE 128 // 定义接收缓冲区大小
+
 void Uart_Init(void);
 void BlueTooth_Stop(void);
 void BlueTooth_Start(void);
