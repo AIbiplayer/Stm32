@@ -42,19 +42,18 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
         # Add user defined library search paths
 )
 
-file(GLOB_RECURSE LIB_SOURCEC "Lib/*c")
-file(GLOB_RECURSE LIB_SOURCEH "Lib/*h")
+file(GLOB_RECURSE LIB_SOURCE "Lib/*c")
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
         # Add user sources here
-        ${LIB_SOURCEC}
+        ${LIB_SOURCE}
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
         # Add user defined include paths
-        ${LIB_SOURCEH}
+        Lib/
 )
 
 # Add project symbols (macros)
