@@ -10,8 +10,6 @@
 #include "mpu6050.h"
 #include "ShowShape.h"
 
-extern TIM_HandleTypeDef htim3;
-
 static float Q[2][2] = {{0.0025, 0}, {0, 0.0025}}; //误差协方差
 static float R[2][2] = {{0.3, 0}, {0, 0.3}}; //测量误差协方差
 static float Z[2]; //加速度计测量值
@@ -36,8 +34,8 @@ double yawlast = 0;
  */
 void Gimbal_Init(void)
 {
-    HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1); // 启动偏航舵机PWM
-    HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2); // 启动
+    HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1); // 启动偏航舵机PWM
+    HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2); // 启动
     Yaw_SetAngle(90.0f); // 设置偏航舵机初始位置
     Pitch_SetAngle(90.0f); // 设置俯仰舵机初始位置
 }

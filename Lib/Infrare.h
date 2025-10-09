@@ -7,11 +7,8 @@
 #ifndef __INFRARE_H__
 #define __INFRARE_H__
 
-#include "main.h"
-#include "stdbool.h"
-
 void Inf_Server(void);
-void Infrare_Stop(void);
-void Infrare_Start(void);
+void Inf_Stop(void);
+void Inf_Start(void);
 
 #endif // __INFRARE_H__

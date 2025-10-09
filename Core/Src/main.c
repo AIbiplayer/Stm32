@@ -28,8 +28,19 @@
 /* USER CODE BEGIN Includes */
 
 #include "BlueTooth.h"
+#include "Chassis.h"
 #include "OLED.h"
+#include "ShowShape.h"
+#include "Key.h"
+#include  "Infrare.h"
 #include "mpu6050.h"
+
+extern uint8_t Receive_Gimbal_Mode;
+extern Control_Mode Chassis_Mode;
+extern bool Mode_Change_Flag;
+extern bool Inf_ReceiveFlag;
+extern Chassis Chassis_Control;
+extern double pitch_, roll_, yaw;
 
 /* USER CODE END Includes */
 
@@ -105,6 +116,9 @@ int main(void)
     OLED_Init();
     MPU6050_Init();
     Uart_Init();
+    Inf_Stop();
+    BlueTooth_Stop();
+    HAL_TIM_Base_Start_IT(&htim3);
 
     /* USER CODE END 2 */
 
@@ -112,6 +126,69 @@ int main(void)
     /* USER CODE BEGIN WHILE */
     while (1)
     {
+        Mode_Change_Flag ? (Mode_Change_Flag = false, Uart_printf(&huart1, "M%d\n", (int8_t)Chassis_Mode)) : 0;
+        //向蓝牙传输模式
+
+        if (Chassis_Mode == INFRARE_MODE && Inf_ReceiveFlag) //解析红外线
+        {
+            Inf_ReceiveFlag = false;
+            Inf_Server();
+        }
+
+        if (Chassis_Mode == BLUETOOTH_MODE)
+            switch (Receive_Gimbal_Mode) //云台模式
+            {
+            case 0:
+                Yaw_SetAngle(90.0f); // 设置偏航舵机初始位置
+                Pitch_SetAngle(90.0f); // 设置俯仰舵机初始位置
+                break;
+            case 1:
+                ShowSin();
+                break;
+            case 2:
+                ShowTriangle();
+                break;
+            case 3:
+                ShowCircal();
+                break;
+            }
+
+        Chassis_Behavior();
+
+        OLED_ShowString(1, 1, "Pit:");
+        OLED_ShowString(2, 1, "Rol:");
+        OLED_ShowString(3, 1, "Yaw:");
+        OLED_ShowSignedNum(1, 5, (int32_t)pitch_, 2);
+        OLED_ShowSignedNum(2, 5, (int32_t)roll_, 2);
+        OLED_ShowSignedNum(3, 5, (int32_t)yaw, 2);
+        OLED_ShowString(1, 10, "CM:");
+        switch (Chassis_Mode)
+        {
+        case 0:
+            OLED_ShowString(1, 14, "BT");
+            break;
+        case 1:
+            OLED_ShowString(1, 14, "IR");
+            break;
+        case 2:
+            OLED_ShowString(1, 14, "NO");
+            break;
+        default:
+            break;
+        }
+        OLED_ShowString(2, 10, "CH:");
+        switch (Chassis_Control.Status)
+        {
+        case 0:
+            OLED_ShowNum(2, 14, 3, 1);
+            break;
+        case 1:
+            OLED_ShowNum(2, 14, 4, 1);
+            break;
+        default:
+            break;
+        }
+
         /* USER CODE END WHILE */
 
         /* USER CODE BEGIN 3 */

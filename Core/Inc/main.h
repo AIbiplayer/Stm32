@@ -83,6 +83,7 @@ void Error_Handler(void);
 #define Buzz_GPIO_Port GPIOA
 #define Infrare_Pin GPIO_PIN_3
 #define Infrare_GPIO_Port GPIOB
+#define Infrare_EXTI_IRQn EXTI3_IRQn
 #define SW2_Pin GPIO_PIN_4
 #define SW2_GPIO_Port GPIOB
 #define SW3_Pin GPIO_PIN_5
