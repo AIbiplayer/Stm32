@@ -32,6 +32,7 @@
 #include "OLED.h"
 #include "ShowShape.h"
 #include "Key.h"
+#include "Gimbal.h"
 #include  "Infrare.h"
 #include "mpu6050.h"
 
@@ -40,6 +41,7 @@ extern Control_Mode Chassis_Mode;
 extern bool Mode_Change_Flag;
 extern bool Inf_ReceiveFlag;
 extern Chassis Chassis_Control;
+extern uint8_t Chassis_Index;
 extern double pitch_, roll_, yaw;
 
 /* USER CODE END Includes */
@@ -126,8 +128,27 @@ int main(void)
     /* USER CODE BEGIN WHILE */
     while (1)
     {
-        Mode_Change_Flag ? (Mode_Change_Flag = false, Uart_printf(&huart1, "M%d\n", (int8_t)Chassis_Mode)) : 0;
-        //向蓝牙传输模式
+        KalmanFilter();
+        if (Mode_Change_Flag)
+        {
+            Mode_Change_Flag = false;
+            switch (Chassis_Mode)
+            {
+            case NONE_MODE:
+                BlueTooth_Stop();
+                Inf_Stop();
+                break;
+            case BLUETOOTH_MODE:
+                BlueTooth_Start();
+                Inf_Stop();
+                break;
+            case INFRARE_MODE:
+                BlueTooth_Stop();
+                Inf_Start();
+                break;
+            }
+            Uart_printf(&huart1, "M%d\n", (int8_t)Chassis_Mode);
+        }
 
         if (Chassis_Mode == INFRARE_MODE && Inf_ReceiveFlag) //解析红外线
         {
@@ -177,7 +198,7 @@ int main(void)
             break;
         }
         OLED_ShowString(2, 10, "CH:");
-        switch (Chassis_Control.Status)
+        switch (Chassis_Index)
         {
         case 0:
             OLED_ShowNum(2, 14, 3, 1);

@@ -150,7 +150,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t Size) // 串
 {
     if (huart->Instance == USART1)
     {
-        HAL_GPIO_TogglePin(LED7_GPIO_Port, LED7_Pin);
+        HAL_GPIO_TogglePin(LED2_GPIO_Port, LED2_Pin);
         Parse_Bluetooth_Data();
 
         memset(U1_Receive_Buffer, 0, sizeof(U1_Receive_Buffer)); // 清空接收缓冲区

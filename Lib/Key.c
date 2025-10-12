@@ -35,7 +35,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
     if (htim->Instance == TIM3)
     {
         Inf_Interval++;
-
         for (uint8_t i = 0; i < 4; i++) // 四个按键轮询
         {
             Last_Key_Flag = SW[i].Key_OnceFlag;
@@ -53,7 +52,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
             Current_Key_Flag = SW[i].Key_OnceFlag;
             Current_Key_Flag != Last_Key_Flag ? (Latest_Key_Flag = i, Mode_Change_Flag = true) : 0; // 按键切换
         }
-
         if (SW[0].Key_OnceFlag && !SW[1].Key_OnceFlag) // SW2为真,SW3为假
         {
             Chassis_Mode = BLUETOOTH_MODE;
@@ -87,14 +85,16 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
             HAL_GPIO_WritePin(LED6_GPIO_Port, LED6_Pin, GPIO_PIN_RESET);
         }
     }
-
-    SW[2].Key_OnceFlag
-        ? (Chassis_Index = 1, HAL_GPIO_WritePin(LED7_GPIO_Port, LED7_Pin, GPIO_PIN_SET))
-        : (Chassis_Index = 0, HAL_GPIO_WritePin(LED7_GPIO_Port, LED7_Pin, GPIO_PIN_RESET)); // SW4切换三轮和四轮
-
-    if (SW[3].Key_OnceFlag) // SW5
+    if (Chassis_Mode == NONE_MODE)
     {
+        SW[2].Key_OnceFlag
+            ? (Chassis_Index = 1, HAL_GPIO_WritePin(LED7_GPIO_Port, LED7_Pin, GPIO_PIN_SET))
+            : (Chassis_Index = 0, HAL_GPIO_WritePin(LED7_GPIO_Port, LED7_Pin, GPIO_PIN_RESET)); // SW4切换三轮和四轮
     }
+
+    SW[3].Key_OnceFlag
+        ? (HAL_GPIO_WritePin(Buzz_GPIO_Port, Buzz_Pin, GPIO_PIN_RESET))
+        : (HAL_GPIO_WritePin(Buzz_GPIO_Port, Buzz_Pin, GPIO_PIN_SET));
 
     Last_Key_Flag = Current_Key_Flag;
 }

@@ -5,7 +5,6 @@
  */
 
 #include <string.h>
-
 #include "main.h"
 #include "stdbool.h"
 #include  "Chassis.h"
@@ -25,11 +24,12 @@ extern uint8_t Chassis_Index;
 
 /**
  * @brief 外部中断3服务函数
- * @note 红外接收中断，接收时闪烁LED8
+ * @note 红外接收中断，接收时闪烁LED2
  */
 void EXTI3_IRQHandler(void)
 {
-    HAL_GPIO_TogglePin(LED8_GPIO_Port, LED8_Pin);
+    __HAL_GPIO_EXTI_CLEAR_IT(Infrare_Pin);
+    HAL_GPIO_TogglePin(LED2_GPIO_Port, LED2_Pin);
 
     if (Inf_StartFlag)
     {
@@ -46,14 +46,15 @@ void EXTI3_IRQHandler(void)
             Inf_Interval = 0;
             Inf_ReceiveFlag = true;
         }
-        else
-        {
-            Inf_Index = 0;
-            Inf_Interval = 0;
-            Inf_StartFlag = true;
-        }
-        HAL_GPIO_EXTI_IRQHandler(Infrare_Pin);
     }
+    else
+    {
+        Inf_Index = 0;
+        Inf_Interval = 0;
+        Inf_StartFlag = true;
+    }
+
+    HAL_GPIO_EXTI_IRQHandler(Infrare_Pin);
 }
 
 /**
@@ -158,8 +159,7 @@ void Inf_Stop(void)
 {
     HAL_NVIC_DisableIRQ(EXTI3_IRQn);
     __HAL_GPIO_EXTI_CLEAR_IT(Infrare_Pin);
-    memset(Inf_Byte, 0, 33);
-    memset(Inf_Data, 0, 4);
+    HAL_NVIC_ClearPendingIRQ(EXTI3_IRQn);
 }
 
 /**
@@ -168,6 +168,6 @@ void Inf_Stop(void)
 void Inf_Start(void)
 {
     HAL_NVIC_EnableIRQ(EXTI3_IRQn);
-    memset(Inf_Byte, 0, 33);
-    memset(Inf_Data, 0, 4);
+    __HAL_GPIO_EXTI_CLEAR_IT(Infrare_Pin);
+    HAL_NVIC_ClearPendingIRQ(EXTI3_IRQn);
 }
