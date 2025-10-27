@@ -842,17 +842,24 @@ ARM Macro Assembler    Page 13
               00000200 
               00000000 
 Command Line: --debug --xref --diag_suppress=9931 --cpu=Cortex-M4.fp.sp --apcs=
-interwork --depend=omni-framework\startup_stm32f407xx.d -oomni-framework\startu
+interwork --depend=robot-framework\startup_stm32f407xx.d -orobot-framework\star
 
 
 
 ARM Macro Assembler    Page 14 
 
 
-p_stm32f407xx.o -I.\RTE\_Omni-Framework -I"F:\Keil 5\ARM\PACK\ARM\CMSIS\5.9.0\C
-MSIS\Core\Include" --predefine="__UVISION_VERSION SETA 539" --predefine="_RTE_ 
-SETA 1" --predefine="STM32F407xx SETA 1" --predefine="_RTE_ SETA 1" --list=star
-tup_stm32f407xx.lst startup_stm32f407xx.s
+tup_stm32f407xx.o -I../Core/Inc -I../USB_DEVICE/App -I../USB_DEVICE/Target -I..
+/Drivers/STM32F4xx_HAL_Driver/Inc -I../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy 
+-I../Middlewares/Third_Party/FreeRTOS/Source/include -I../Middlewares/Third_Par
+ty/FreeRTOS/Source/CMSIS_RTOS_V2 -I../Middlewares/Third_Party/FreeRTOS/Source/p
+ortable/RVDS/ARM_CM4F -I../Middlewares/ST/STM32_USB_Device_Library/Core/Inc -I.
+./Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc -I../Drivers/CMSIS/Devi
+ce/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -I../Middlewares/ST/ARM/DSP/
+Inc -I.\RTE\_Robot-Framework -I"F:\Keil 5\ARM\PACK\ARM\CMSIS\5.9.0\CMSIS\Core\I
+nclude" --predefine="__UVISION_VERSION SETA 539" --predefine="_RTE_ SETA 1" --p
+redefine="STM32F407xx SETA 1" --predefine="_RTE_ SETA 1" --list=startup_stm32f4
+07xx.lst startup_stm32f407xx.s
 
 
 
