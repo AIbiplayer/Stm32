@@ -118,6 +118,7 @@ void Inf_Server(void)
         Chassis_Control.Status = CHASSIS_SPIN;
         break;
     case 176: // #，底盘正常运动
+        Chassis_Control.Status = CHASSIS_STOP;
         break;
     case 24: // 上，前进
         Chassis_Control.Status = CHASSIS_NORAML;

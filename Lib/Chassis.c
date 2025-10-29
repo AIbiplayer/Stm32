@@ -93,25 +93,25 @@ void Chassis_Behavior(void)
         }
         else if (Chassis_Control.Status == CHASSIS_NORAML)
         {
-            Chassis_Control.Speed_Set[1] = Chassis_Control.Speed_Multiple
+            Chassis_Control.Speed_Set[0] = Chassis_Control.Speed_Multiple
                 * (Chassis_Control.Move.x
                     - Chassis_Control.Move.y
                     + Chassis_Control.Move.w);
 
-            Chassis_Control.Speed_Set[0] = Chassis_Control.Speed_Multiple
-                * (Chassis_Control.Move.x
-                    + Chassis_Control.Move.y
+            Chassis_Control.Speed_Set[1] = Chassis_Control.Speed_Multiple
+                * (-Chassis_Control.Move.x
+                    - Chassis_Control.Move.y
                     + Chassis_Control.Move.w);
 
             Chassis_Control.Speed_Set[2] = Chassis_Control.Speed_Multiple
-                * (-Chassis_Control.Move.x
+                * (Chassis_Control.Move.x
                     + Chassis_Control.Move.y
                     + Chassis_Control.Move.w);
 
             Chassis_Control.Speed_Set[3] = Chassis_Control.Speed_Multiple
-                * (Chassis_Control.Move.x
-                    - Chassis_Control.Move.y
-                    - Chassis_Control.Move.w);
+                * (-Chassis_Control.Move.x
+                    + Chassis_Control.Move.y
+                    + Chassis_Control.Move.w);
         }
         Uart_printf(&huart2, "%d,%d,%d,%d,4\n",
                     Chassis_Control.Speed_Set[0],

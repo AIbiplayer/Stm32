@@ -84,43 +84,31 @@ void Parse_Bluetooth_Data(void)
 
 /**
  * @brief 解析底盘速度数据
- * @note 数据格式为"x%dy%dw%d\n"，速度范围-100~100
  * @note 该函数从U2_Receive_Buffer中提取最新的一组速度数据
  */
 void Parse_Chassis_Speed(void)
 {
     char* token;
-    int8_t temp_speed[3] = {0};
     uint8_t index = 0;
 
-    // 查找最后一个换行符，确保取最后一组数据
-    char* last_newline = strrchr(U2_Receive_Buffer, '\n');
-    if (last_newline != NULL)
-    {
-        // 从最后一个换行符后开始解析（若存在前序数据）
-        token = strtok(last_newline + 1, ",\n");
-    }
-    else
-    {
-        // 无换行符时从开头解析
-        token = strtok(U2_Receive_Buffer, ",\n");
-    }
-    // 解析速度值
+    // 以逗号和换行符为分隔符分割字符串
+    token = strtok(U2_Receive_Buffer, ",\n");
+
+    // 解析三个速度值
     while (token != NULL && index < 3)
     {
+        // 字符串转整数
         int val = atoi(token);
-        // 限幅在-100~100
-        if (val > 100)
-            val = 100;
-        else if (val < -100)
-            val = -100;
 
-        temp_speed[index++] = (int8_t)val;
+        // 存入数组（无需额外限幅，因题目未指定范围，直接强转）
+        Chassis_Speed[index++] = (int8_t)val;
+
+        // 解析下一个值
         token = strtok(NULL, ",\n");
     }
-    // 赋值到目标数组
-    for (uint8_t i = 0; i < 3; i++)
-        Chassis_Speed[i] = temp_speed[i];
+
+    // 清空接收缓冲区，准备下次接收
+    memset(U2_Receive_Buffer, 0, sizeof(U2_Receive_Buffer));
 }
 
 /**
@@ -145,6 +133,7 @@ void Uart_printf(UART_HandleTypeDef* huart, char* format, ...)
  * @param huart UART句柄
  * @param Size 接收数据长度
  * @note 该函数在接收到数据后被调用,蓝牙收到数据闪烁LED7
+ *       蓝牙APP中提供的串口助手实际上是和Usart3通信
  */
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t Size) // 串口接收回调函数
 {
@@ -159,6 +148,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t Size) // 串
     }
     else if (huart->Instance == USART2)
     {
+        HAL_GPIO_TogglePin(LED2_GPIO_Port, LED2_Pin);
         Parse_Chassis_Speed();
         Uart_printf(&huart1, "%d,%d,%d\n", Chassis_Speed[0], Chassis_Speed[1], Chassis_Speed[2]);
 
@@ -166,7 +156,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t Size) // 串
         HAL_UARTEx_ReceiveToIdle_DMA(&huart2, (uint8_t*)U2_Receive_Buffer, sizeof(U2_Receive_Buffer));
         __HAL_DMA_DISABLE_IT(huart2.hdmarx, DMA_IT_HT);
     }
-    else if (huart->Instance == USART3)
+    else if (huart->Instance == USART3) // 蓝牙APP中的串口助手与此通信
     {
         memset(U3_Receive_Buffer, 0, sizeof(U3_Receive_Buffer));
         HAL_UARTEx_ReceiveToIdle_DMA(&huart3, (uint8_t*)U3_Receive_Buffer, sizeof(U3_Receive_Buffer));
