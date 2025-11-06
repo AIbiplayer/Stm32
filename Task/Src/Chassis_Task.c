@@ -10,13 +10,17 @@
 #include "DJI_Motor.h"
 #include "message_center.h"
 #include "can.h"
+#include "robot_def.h"
 
-static DJI_Motor_Instance* Omni_Wheel;
+static DJI_Motor_Instance* Omni_Wheel[4];
 static Publisher_t* chassis_pub; // 用于发布底盘的数据
 static Subscriber_t* chassis_sub; // 用于订阅底盘的控制命令
 
 static void Chassis_Init(void);
 
+/**
+ * @brief 底盘FreeRTOS任务
+ */
 void ChassisTask(void* argument)
 {
     /* USER CODE BEGIN ChassisTask */
@@ -26,7 +30,6 @@ void ChassisTask(void* argument)
     /* Infinite loop */
     for (;;)
     {
-        DJI_Motor_Control();
         osDelay(1);
     }
 }
@@ -40,7 +43,7 @@ static void Chassis_Init(void)
     Motor_Init_s Omni_Chassis = {
         .Can_Init_Config = {.can_handle = &hcan1},
         .Control_Setting = {
-            .Loop_Control = ANGLE_CONTROL
+            .Loop_Control = SPEED_CONTROL
         },
         .Motor_Type = M3508,
         .Working_Type = MOTOR_ENABLE
@@ -67,6 +70,21 @@ static void Chassis_Init(void)
 
     Omni_Chassis.Can_Init_Config.tx_id = 1;
     Omni_Chassis.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
+    Omni_Wheel[0] = DJI_Motor_Init(&Omni_Chassis);
 
-    Omni_Wheel = DJI_Motor_Init(&Omni_Chassis);
+    Omni_Chassis.Can_Init_Config.tx_id = 2;
+    Omni_Chassis.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
+    Omni_Wheel[1] = DJI_Motor_Init(&Omni_Chassis);
+
+    Omni_Chassis.Can_Init_Config.tx_id = 3;
+    Omni_Chassis.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
+    Omni_Wheel[2] = DJI_Motor_Init(&Omni_Chassis);
+
+    Omni_Chassis.Can_Init_Config.tx_id = 4;
+    Omni_Chassis.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
+    Omni_Wheel[3] = DJI_Motor_Init(&Omni_Chassis);
+
+    chassis_sub = SubRegister("chassis_cmd", sizeof(Chassis_Ctrl_Cmd_s));
+    chassis_pub = PubRegister("chassis_feed", sizeof(Chassis_Upload_Data_s));
+
 }

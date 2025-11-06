@@ -33,7 +33,10 @@ enable_language(C ASM)
 
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME}
-        Task/Chassis_Task.c)
+        Task/Src/Chassis_Task.c
+        Task/Src/Robot_Cmd_Task.c
+        Task/Src/Vofa_Debug.c
+        Task/Inc/Vofa_Debug.h)
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
@@ -47,6 +50,7 @@ file(GLOB_RECURSE BSP_SOURCE "Bsp/Src/*c")
 file(GLOB_RECURSE ALGORITHM_SOURCE "Algorithm/Src/*c")
 file(GLOB_RECURSE MOTOR_SOURCE "Motor/Src/*c")
 file(GLOB_RECURSE MODULES_SOURCE "Modules/Src/*c")
+file(GLOB_RECURSE TASK_SOURCE "Task/Src/*c")
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
@@ -55,6 +59,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
         ${ALGORITHM_SOURCE}
         ${MOTOR_SOURCE}
         ${MODULES_SOURCE}
+        ${TASK_SOURCE}
 )
 
 # Add include paths
@@ -64,6 +69,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
         Algorithm/Inc
         Motor/Inc
         Modules/Inc
+        Task/Inc
 )
 
 # Add project symbols (macros)

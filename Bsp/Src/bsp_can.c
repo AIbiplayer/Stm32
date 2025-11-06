@@ -137,7 +137,6 @@ void CANSetDLC(CANInstance *_instance, uint8_t length)
  */
 static void CANFIFOxCallback(CAN_HandleTypeDef *_hcan, uint32_t fifox)
 {
-    HAL_GPIO_TogglePin(LED_B_GPIO_Port, LED_B_Pin);
     static CAN_RxHeaderTypeDef rxconf; // 同上
     uint8_t can_rx_buff[8];
     while (HAL_CAN_GetRxFifoFillLevel(_hcan, fifox)) // FIFO不为空,有可能在其他中断时有多帧数据进入

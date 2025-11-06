@@ -91,14 +91,37 @@ static void Motor_Grouping(DJI_Motor_Instance* DJI_Motor, CAN_Init_Config_s* Con
 
     switch (DJI_Motor->Motor_Type)
     {
-    case M3508:
-        Group = 1;
+    case M2006:
+        Group = 1; // M2006电机由CAN1发送
         InGroup_ID = Motor_ID;
         Config->rx_id = 0x200 + Motor_ID + 1;
         Send_Enable_Flag[Group] = true;
         DJI_Motor->Send_Group = Group;
         DJI_Motor->Message_Num = InGroup_ID;
         break;
+    case M3508:
+        if (Motor_ID < 4)
+        {
+            InGroup_ID = Motor_ID;
+            Group = Config->can_handle == &hcan1 ? 1 : 4;
+        }
+        else
+        {
+            InGroup_ID = Motor_ID - 4;
+            Group = Config->can_handle == &hcan1 ? 0 : 3;
+        }
+        Config->rx_id = 0x200 + Motor_ID + 1;
+        Send_Enable_Flag[Group] = true;
+        DJI_Motor->Send_Group = Group;
+        DJI_Motor->Message_Num = InGroup_ID;
+        for (uint8_t i = 0; i < Idx; ++i)
+        {
+            if (Instance_Group[i]->Motor_Can_Instance->can_handle == Config->can_handle &&
+                Instance_Group[i]->Motor_Can_Instance->rx_id == Config->rx_id)
+            {
+                // uint16_t can_bus = config->can_handle == &hcan1 ? 1 : 2;
+            }
+        }
     default:
         break;
     }
