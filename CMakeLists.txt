@@ -36,7 +36,11 @@ add_executable(${CMAKE_PROJECT_NAME}
         Task/Src/Chassis_Task.c
         Task/Src/Robot_Cmd_Task.c
         Task/Src/Vofa_Debug.c
-        Task/Inc/Vofa_Debug.h)
+        Task/Inc/Vofa_Debug.h
+        Task/Src/Gimbal_Task.c
+        Algorithm/Src/Sliding.c
+        Algorithm/Inc/Sliding.h
+        Task/Src/Ins_Task.c)
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)

@@ -17,8 +17,6 @@
 #include "main.h"
 #include "usart.h"
 
-#pragma anon_unions
-
 // 用于遥控器数据读取,遥控器数据是一个大小为2的数组
 #define LAST 1
 #define TEMP 0

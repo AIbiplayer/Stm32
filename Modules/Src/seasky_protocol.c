@@ -10,6 +10,8 @@
  *
  */
 
+#include <string.h>
+
 #include "seasky_protocol.h"
 #include "crc8.h"
 #include "crc16.h"

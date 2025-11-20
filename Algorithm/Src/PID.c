@@ -14,9 +14,6 @@ extern float Temp[4];
 extern float Speed[4];
 extern float I[4];
 
-PID_Typedef PID1;
-PID_Typedef PID2;
-
 /**
  * @brief PID初始化及参数配置
  * @param PID_ 输入结构体
@@ -60,18 +57,20 @@ float PID_Calculate(PID_Typedef* PID_, float Target_, float Actual_)
 
     PID_->Error_Sum += PID_->Improve & Trapezoid_Intergral ? (PID_->Error + PID_->Last_Error) / 2 : PID_->Error;
 
+    if (PID_->Improve & Integral_Limit)
+    {
+        PID_->Error_Sum = fabsf(PID_->Error_Sum) > PID_->I_Limit
+                              ? (int16_t)(PID_->Error_Sum) > 0
+                                    ? PID_->I_Limit
+                                    : -(PID_->I_Limit)
+                              : PID_->Error_Sum;
+    }
+
     PID_->POut = PID_->Kp * PID_->Error;
     PID_->IOut = PID_->Ki * PID_->Error_Sum;
     PID_->Dout = PID_->Kd * (PID_->Error - PID_->Last_Error);
 
-    if (PID_->Improve & Integral_Limit)
-    {
-        PID_->IOut = fabsf(PID_->IOut) > PID_->I_Limit
-                         ? (int16_t)PID_->IOut > 0
-                               ? PID_->I_Limit
-                               : -PID_->I_Limit
-                         : PID_->IOut;
-    }
+
     if (PID_->Improve & Derivative_On_Measurement)
     {
         PID_->Dout = PID_->Kd * (PID_->Last_Actual - PID_->Actual);
@@ -92,4 +91,14 @@ float PID_Calculate(PID_Typedef* PID_, float Target_, float Actual_)
                              : -PID_->Max_Output
                        : PID_->Output;
     return PID_->Output;
+}
+
+/**
+ * @brief 清除PID积分
+ * @param PID_ 输入结构体
+ */
+void PID_Clean_I(PID_Typedef* PID_)
+{
+    PID_->Error_Sum = 0.0f;
+    PID_->IOut = 0.0f;
 }

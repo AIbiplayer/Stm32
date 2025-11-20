@@ -4,13 +4,18 @@
 
 #include "master_process.h"
 #include "stdint.h"
+#include "DJI_Motor.h"
+#include "INS.h"
 
 #define ONE_BOARD // 单板控制整车
 #define VISION_USE_VCP  // 使用虚拟串口发送视觉数据
 // #define VISION_USE_UART // 使用串口发送视觉数据
 
 /* 机器人重要参数定义,注意根据不同机器人进行修改,浮点数需要以.0或f结尾,无符号以u结尾 */
+#define PI               3.14159265358979f
+
 // 云台参数
+#define YAW_ALIGN_ANGLE (YAW_CHASSIS_ALIGN_ECD * ECD_ANGLE_COEF_DJI) // 对齐时的角度,0-360
 #define YAW_CHASSIS_ALIGN_ECD 2078  // 云台和底盘对齐指向相同方向时的电机编码器值,若对云台有机械改动需要修改
 #define YAW_ECD_GREATER_THAN_4096 0 // ALIGN_ECD值是否大于4096,是为1,否为0;用于计算云台偏转角度
 #define PITCH_HORIZON_ECD 6737.0      // 云台处于水平位置时编码器值,若对云台有机械改动需要修改
@@ -21,23 +26,27 @@
 #define REDUCTION_RATIO_LOADER 36.0f // 拨盘电机的减速比,2006减速比36：1
 #define NUM_PER_CIRCLE 7            // 拨盘一圈的装载量
 // 机器人底盘修改的参数,单位为mm(毫米)
-#define WHEEL_BASE 320              // 纵向轴距(前进后退方向)
-#define TRACK_WIDTH 320             // 横向轮距(左右平移方向)
+#define WHEEL_BASE 500              // 纵向轴距(前进后退方向)
+#define TRACK_WIDTH 500             // 横向轮距(左右平移方向)
 #define CENTER_GIMBAL_OFFSET_X 0    // 云台旋转中心距底盘几何中心的距离,前后方向,云台位于正中心时默认设为0
 #define CENTER_GIMBAL_OFFSET_Y 0    // 云台旋转中心距底盘几何中心的距离,左右方向,云台位于正中心时默认设为0
-#define RADIUS_WHEEL 70             // 轮子半径
+#define RADIUS_WHEEL 75             // 轮子半径
 #define REDUCTION_RATIO_WHEEL 19.0f // 电机减速比,因为编码器量测的是转子的速度而不是输出轴的速度故需进行转换
 
 #define GYRO2GIMBAL_DIR_YAW 1   // 陀螺仪数据相较于云台的yaw的方向,1为相同,-1为相反
 #define GYRO2GIMBAL_DIR_PITCH -1 // 陀螺仪数据相较于云台的pitch的方向,1为相同,-1为相反
 #define GYRO2GIMBAL_DIR_ROLL 1  // 陀螺仪数据相较于云台的roll的方向,1为相同,-1为相反
 
+#define DEGREE_2_RAD 0.01745329252f // pi/180
+#define HALF_WHEEL_BASE (WHEEL_BASE / 2.0f)     // 半轴距
+#define HALF_TRACK_WIDTH (TRACK_WIDTH / 2.0f)   // 半轮距
+#define PERIMETER_WHEEL (RADIUS_WHEEL * 2 * PI) // 轮子周长
+#define LF_CENTER ((HALF_TRACK_WIDTH + CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE - CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
+#define RF_CENTER ((HALF_TRACK_WIDTH - CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE - CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
+#define LB_CENTER ((HALF_TRACK_WIDTH + CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE + CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
+#define RB_CENTER ((HALF_TRACK_WIDTH - CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE + CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
+
 #pragma pack(1) // 压缩结构体,取消字节对齐,下面的数据都可能被传输
-typedef enum
-{
-    ROBOT_STOP = 0,
-    ROBOT_READY,
-} Robot_Status_e;
 
 // 应用状态
 typedef enum
@@ -46,22 +55,23 @@ typedef enum
     APP_ONLINE,
     APP_ERROR,
 } App_Status_e;
+
 typedef enum
 {
-    CHASSIS_ZERO_FORCE = 0,    // 电流零输入
-    CHASSIS_ROTATE,            // 小陀螺模式
-    CHASSIS_NO_FOLLOW,         // 不跟随，允许全向平移
+    CHASSIS_ZERO_FORCE = 0, // 电流零输入
+    CHASSIS_ROTATE, // 小陀螺模式
+    CHASSIS_NO_FOLLOW, // 不跟随，允许全向平移
     CHASSIS_FOLLOW_GIMBAL_YAW, // 跟随模式，底盘叠加角度环控制
-	CHASSIS_INDEPENDENCE,
+    CHASSIS_INDEPENDENCE,
 } chassis_mode_e;
 
 // 云台模式设置
 typedef enum
 {
     GIMBAL_ZERO_FORCE = 0, // 电流零输入
-    GIMBAL_FREE_MODE,      // 云台自由运动模式,即与底盘分离(底盘此时应为NO_FOLLOW)反馈值为电机total_angle;似乎可以改为全部用IMU数据?
-    GIMBAL_GYRO_MODE,      // 云台陀螺仪反馈模式,反馈值为陀螺仪pitch,total_yaw_angle,底盘可以为小陀螺和跟随模式
-	GIMBAL_VISION,         //自瞄模式
+    GIMBAL_FREE_MODE, // 云台自由运动模式,即与底盘分离(底盘此时应为NO_FOLLOW)反馈值为电机total_angle;似乎可以改为全部用IMU数据?
+    GIMBAL_GYRO_MODE, // 云台陀螺仪反馈模式,反馈值为陀螺仪pitch,total_yaw_angle,底盘可以为小陀螺和跟随模式
+    GIMBAL_VISION, //自瞄模式
 } gimbal_mode_e;
 
 // 发射模式设置
@@ -70,30 +80,32 @@ typedef enum
     SHOOT_OFF = 0,
     SHOOT_ON,
 } shoot_mode_e;
+
 typedef enum
 {
     FRICTION_OFF = 0, // 摩擦轮关闭
-    FRICTION_ON,      // 摩擦轮开启
+    FRICTION_ON, // 摩擦轮开启
 } friction_mode_e;
 
 typedef enum
 {
     LID_OPEN = 0, // 弹舱盖打开
-    LID_CLOSE,    // 弹舱盖关闭
+    LID_CLOSE, // 弹舱盖关闭
 } lid_mode_e;
 
 typedef enum
 {
-    LOAD_STOP = 0,  // 停止发射
-    LOAD_REVERSE,   // 反转
-    LOAD_1_BULLET,  // 单发
-    LOAD_3_BULLET,  // 三发
+    LOAD_STOP = 0, // 停止发射
+    LOAD_REVERSE, // 反转
+    LOAD_1_BULLET, // 单发
+    LOAD_3_BULLET, // 三发
     LOAD_BURSTFIRE, // 连发
 } loader_mode_e;
 
 // 功率限制,从裁判系统获取,是否有必要保留?
 typedef struct
-{ // 功率控制
+{
+    // 功率控制
     float chassis_power_mx;
 } Chassis_Power_Data_s;
 
@@ -106,30 +118,31 @@ typedef struct
 typedef struct
 {
     // 控制部分
-    float vx;           // 前进方向速度
-    float vy;           // 横移方向速度
-    float wz;           // 旋转速度
+    float vx; // 前进方向速度
+    float vy; // 横移方向速度
+    float wz; // 旋转速度
     float offset_angle; // 底盘和归中位置的夹角
     chassis_mode_e chassis_mode;
-	chassis_mode_e chassis_last_mode;
+    chassis_mode_e chassis_last_mode;
     int chassis_speed_buff;
-	
-	double  Y_set;
-	double  X_set;
-	float set_angle;//由遥控器编码器算得的舵向角度
-	uint16_t  set_ecd;  //由反正切得到的目标编码值
-	float angle_offset_c; //云台与底盘的角度差,底盘用
+
+    double Y_set;
+    double X_set;
+    float set_angle; //由遥控器编码器算得的舵向角度
+    uint16_t set_ecd; //由反正切得到的目标编码值
+    float angle_offset_c; //云台与底盘的角度差,底盘用
 } Chassis_Ctrl_Cmd_s;
 
 // cmd发布的云台控制数据,由gimbal订阅
 typedef struct
-{ // 云台角度控制
+{
+    // 云台角度控制
     float yaw;
     float pitch;
     float chassis_rotate_wz;
 
     gimbal_mode_e gimbal_mode;
-	float angle_offset_g; //云台与底盘角度差，云台用
+    float angle_offset_g; //云台与底盘角度差，云台用
 } Gimbal_Ctrl_Cmd_s;
 
 // cmd发布的发射控制数据,由shoot订阅
@@ -142,7 +155,7 @@ typedef struct
     Bullet_Speed_e bullet_speed; // 弹速枚举
     uint8_t rest_heat;
     float shoot_rate; // 连续发射的射频,unit per s,发/秒
-	uint8_t ONE_SHOOT_FLAG;
+    uint8_t ONE_SHOOT_FLAG;
 } Shoot_Ctrl_Cmd_s;
 
 /* ----------------gimbal/shoot/chassis发布的反馈数据----------------*/
@@ -157,15 +170,15 @@ typedef struct
     // float real_vx;
     // float real_vy;
     // float real_wz;
-    uint8_t rest_heat;           // 剩余枪口热量
+    uint8_t rest_heat; // 剩余枪口热量
     Bullet_Speed_e bullet_speed; // 弹速限制
-    Enemy_Color_e enemy_color;   // 0 for blue, 1 for red
+    Enemy_Color_e enemy_color; // 0 for blue, 1 for red
 } Chassis_Upload_Data_s;
 
 
 typedef struct
 {
-    // attitude_t gimbal_imu_data;
+    attitude_t gimbal_imu_data;
     uint16_t yaw_motor_single_round_angle;
 } Gimbal_Upload_Data_s;
 

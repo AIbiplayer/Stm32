@@ -27,6 +27,9 @@ typedef struct
     float Current; ///< 电流值
     uint8_t Temp; ///< 温度
 
+    int32_t Total_Round; ///< 总圈数
+    int64_t Total_Angle; ///< 总角度值
+
     uint8_t Block_CNT; ///< 堵转计数
 } DJI_Motor_Measure_s; ///< 大疆电机测量值
 

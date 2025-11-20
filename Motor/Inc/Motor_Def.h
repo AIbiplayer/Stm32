@@ -18,6 +18,27 @@ typedef enum
     GM6020 ///< GM6020电机
 } Motor_Type_e; ///< 电机类型
 
+/* 反馈来源设定,若设为OTHER_FEED则需要指定数据来源指针*/
+typedef enum
+{
+    MOTOR_FEEDBACK = 0,
+    OTHER_FEEDBACK
+} Feedback_Source_e;
+
+// 前馈类型
+typedef enum
+{
+    FEEDFORWARD_NONE = 0,
+    SPEED_FEEDFORWARD
+} Feedforward_Type_e;
+
+/* 反馈量正反标志 */
+typedef enum
+{
+    FEEDBACK_NORMAL = 0,
+    FEEDBACK_REVERSE
+} Feedback_Reverse_Flag_e;
+
 //翻转类型
 typedef enum
 {
@@ -45,8 +66,14 @@ typedef struct
     Motor_Loop_Control_Type_e Loop_Control;
     Motor_Reverse_Flag_e Reverse_Flag;
 
-    float* Speed_FeedForward; ///< 速度前馈指针
-    float* Angle_FeedForward; ///< 角度前馈指针
+    Feedback_Source_e Angle_Feedback_Source; // 角度反馈类型
+    Feedback_Source_e Speed_Feedback_Source; // 速度反馈类型
+    float* Other_Angle_Feedback_Ptr; // 角度反馈指针
+    float* Other_Speed_Feedback_Ptr; // 速度反馈指针
+
+    Feedforward_Type_e Feedforward_Flag; // 前馈标志
+    float* Speed_Feedforward_Ptr; // 速度前馈指针
+
 
     PID_Typedef Speed_PID;
     PID_Typedef Angle_PID;

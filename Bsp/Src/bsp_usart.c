@@ -57,7 +57,7 @@ USARTInstance* USARTRegister(USART_Init_Config_s* init_config)
  */
 void Uart_printf(const USART_TRANSFER_MODE Mode, UART_HandleTypeDef* huart, char* format, ...)
 {
-    char buf[1024]; // 定义临时数组，根据实际发送大小微调
+    char buf[128]; // 定义临时数组，根据实际发送大小微调
     va_list args;
     va_start(args, format);
     uint32_t len = vsnprintf((char*)buf, sizeof(buf), (char*)format, args);

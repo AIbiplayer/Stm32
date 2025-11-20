@@ -9,5 +9,6 @@
 #define VOFA_DEBUG_H
 
 void VOFA_Print_RC(void);
+void VOFA_Print_INS(void);
 
 #endif //VOFA_DEBUG_H

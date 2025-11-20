@@ -104,12 +104,8 @@ void sbus_to_rc(const uint8_t* sbus_buf)
  */
 static void RemoteControlRxCallback()
 {
-    // UBaseType_t Task = taskENTER_CRITICAL_FROM_ISR();
     DaemonReload(rc_daemon_instance); // 先喂狗
-    // xSemaphoreGiveFromISR(RC_Parse_FlagHandle, NULL); // 给遥控器解析信号量
     sbus_to_rc(rc_usart_instance->recv_buff); // 进行协议解析
-    VOFA_Print_RC();
-    // taskEXIT_CRITICAL_FROM_ISR(Task);
 }
 
 /**
