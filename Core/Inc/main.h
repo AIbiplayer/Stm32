@@ -49,8 +49,6 @@ extern "C" {
 
 /* USER CODE END EM */
 
-void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
-
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
 
@@ -59,14 +57,18 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define STEER_1_Pin GPIO_PIN_0
-#define STEER_1_GPIO_Port GPIOA
-#define STEER_2_Pin GPIO_PIN_1
-#define STEER_2_GPIO_Port GPIOA
-#define BlueTooth_TX_Pin GPIO_PIN_2
-#define BlueTooth_TX_GPIO_Port GPIOA
-#define BlueTooth_RX_Pin GPIO_PIN_3
-#define BlueTooth_RX_GPIO_Port GPIOA
+#define STEER_1_Pin GPIO_PIN_5
+#define STEER_1_GPIO_Port GPIOE
+#define STEER_2_Pin GPIO_PIN_6
+#define STEER_2_GPIO_Port GPIOE
+#define A_ENCORDER_A_Pin GPIO_PIN_0
+#define A_ENCORDER_A_GPIO_Port GPIOA
+#define A_ENCORDER_B_Pin GPIO_PIN_1
+#define A_ENCORDER_B_GPIO_Port GPIOA
+#define BLUETOOTH_TX_Pin GPIO_PIN_2
+#define BLUETOOTH_TX_GPIO_Port GPIOA
+#define BLUETOOTH_RX_Pin GPIO_PIN_3
+#define BLUETOOTH_RX_GPIO_Port GPIOA
 #define PS2_DAT_Pin GPIO_PIN_4
 #define PS2_DAT_GPIO_Port GPIOA
 #define PS2_CMD_Pin GPIO_PIN_5
@@ -77,14 +79,42 @@ void Error_Handler(void);
 #define PS2_CLK_GPIO_Port GPIOA
 #define BUZZ_Pin GPIO_PIN_0
 #define BUZZ_GPIO_Port GPIOB
+#define D_PWM_FORWARD_Pin GPIO_PIN_9
+#define D_PWM_FORWARD_GPIO_Port GPIOE
+#define D_PWM_BACK_Pin GPIO_PIN_11
+#define D_PWM_BACK_GPIO_Port GPIOE
+#define C_PWM_FORWARD_Pin GPIO_PIN_13
+#define C_PWM_FORWARD_GPIO_Port GPIOE
+#define C_PWM_BACK_Pin GPIO_PIN_14
+#define C_PWM_BACK_GPIO_Port GPIOE
+#define B_PWM_BACK_Pin GPIO_PIN_10
+#define B_PWM_BACK_GPIO_Port GPIOB
+#define B_PWM_FORWARD_Pin GPIO_PIN_11
+#define B_PWM_FORWARD_GPIO_Port GPIOB
+#define C_ENCORDER_A_Pin GPIO_PIN_12
+#define C_ENCORDER_A_GPIO_Port GPIOD
+#define C_ENCORDER_B_Pin GPIO_PIN_13
+#define C_ENCORDER_B_GPIO_Port GPIOD
+#define B_ENCORDER_A_Pin GPIO_PIN_6
+#define B_ENCORDER_A_GPIO_Port GPIOC
+#define B_ENCORDER_B_Pin GPIO_PIN_7
+#define B_ENCORDER_B_GPIO_Port GPIOC
 #define OLED_SDA_Pin GPIO_PIN_9
 #define OLED_SDA_GPIO_Port GPIOC
 #define OLED_SCL_Pin GPIO_PIN_8
 #define OLED_SCL_GPIO_Port GPIOA
+#define DEBUG_TX_Pin GPIO_PIN_9
+#define DEBUG_TX_GPIO_Port GPIOA
+#define DEBUG_RX_Pin GPIO_PIN_10
+#define DEBUG_RX_GPIO_Port GPIOA
+#define A_PWM_BACK_Pin GPIO_PIN_15
+#define A_PWM_BACK_GPIO_Port GPIOA
 #define K210_TX_Pin GPIO_PIN_12
 #define K210_TX_GPIO_Port GPIOC
 #define K210_RX_Pin GPIO_PIN_2
 #define K210_RX_GPIO_Port GPIOD
+#define A_PWM_FORWARD_Pin GPIO_PIN_3
+#define A_PWM_FORWARD_GPIO_Port GPIOB
 #define MPU_SCL_Pin GPIO_PIN_6
 #define MPU_SCL_GPIO_Port GPIOB
 #define MPU_SDA_Pin GPIO_PIN_7
