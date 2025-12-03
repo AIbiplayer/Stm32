@@ -40,8 +40,13 @@ ____                    _____ _______ _____       XTARK@塔克创新
 typedef struct
 {
     uint8_t select : 1; /* B0:SLCT B3:STRT B4:UP B5:R B6:DOWN B7:L   */
+    uint8_t select_last : 1;
+    uint8_t select_mode : 1;
+    uint8_t select_mode_last : 1;
     uint8_t button_L : 1;
     uint8_t button_R : 1;
+    uint8_t button_R_Last : 1;
+    uint8_t Vision_Mode : 2;
     uint8_t start : 1;
     uint8_t up : 1;
     uint8_t down : 1;
@@ -52,6 +57,8 @@ typedef struct
     uint8_t R1 : 1;
     uint8_t R2 : 1;
     uint8_t Triangle : 1;
+    uint8_t Triangle_Last : 1;
+    uint8_t Control_Mode : 1;
     uint8_t Circle : 1;
     uint8_t Cross : 1;
     uint8_t Square : 1;

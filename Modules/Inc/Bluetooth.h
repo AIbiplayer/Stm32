@@ -14,8 +14,7 @@
 
 typedef enum
 {
-    MODE_NONE = 0, // 无模式
-    MODE_ROCKER, // 摇杆模式
+    MODE_ROCKER = 0, // 摇杆模式
     MODE_HANDLE, // 手柄模式
     MODE_GRAVITY // 重力感应模式
 } Bluetooth_Mode_e; // 蓝牙模式
@@ -29,11 +28,13 @@ typedef struct
     uint8_t Up : 1; // 上按键
     uint8_t Back : 1; // 下按键
     uint8_t Left : 1; // 左按键
-    uint8_t Right : 1; // 右按键
+    uint8_t Right : 1; // 啊右按键
     uint8_t Y : 1; // Y按键
     uint8_t X : 1; // X按键
     uint8_t A : 1; // A按键
     uint8_t B : 1; // B按键
+    uint8_t Y_Last : 1; // 上次Y按键状态
+    uint8_t Vision_Mode : 3; // 视觉模式选择
 } Handle_Data_s;
 
 /**
@@ -62,6 +63,7 @@ typedef struct
 {
     int8_t G_Yaw; // 航向角数据
     int8_t Last_G_Yaw; // 上一次航向角数据
+    int8_t G_Yaw_Speed; // 航向角速度
 } Gravity_Data_s;
 
 /**

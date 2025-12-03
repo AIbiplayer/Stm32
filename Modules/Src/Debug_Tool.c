@@ -9,70 +9,78 @@
 #include "Debug_Tool.h"
 #include "Bluetooth.h"
 #include "ax_ps2.h"
+#include "Chassis_Task.h"
+#include "Cmd_Task.h"
 #include "main.h"
 #include "stdarg.h"
 #include "stdio.h"
 #include "usart.h"
 
-extern Bluetooth_Data_s Instance; // 蓝牙数据
+extern Bluetooth_Data_s BL_Instance; // 蓝牙数据
 extern JOYSTICK_TypeDef JoystickStruct; // PS2手柄数据
+extern Chassis_Instance_s CH_Instance; // 底盘数据
 
+/**
+ * @brief 通过蓝牙调试数据输出
+ */
 void Debug_Bluetooth(void)
 {
-    switch (Instance.Mode)
+    switch (BL_Instance.Mode)
     {
     case MODE_ROCKER:
-        Uart_printf(&huart1, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\r\n",
-                    Instance.X_L,
-                    Instance.Y_L,
-                    Instance.Rocker_Handle_Data.X_R,
-                    Instance.Rocker_Handle_Data.Y_R,
-                    Instance.Rocker_Handle_Data.L1,
-                    Instance.Rocker_Handle_Data.L2,
-                    Instance.Rocker_Handle_Data.R1,
-                    Instance.Rocker_Handle_Data.R2,
-                    Instance.Rocker_Handle_Data.K1,
-                    Instance.Rocker_Handle_Data.K2,
-                    Instance.Rocker_Handle_Data.K3,
-                    Instance.Rocker_Handle_Data.K4);
+        Uart_printf(&UART_DEBUG, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\r\n",
+                    BL_Instance.X_L,
+                    BL_Instance.Y_L,
+                    BL_Instance.Rocker_Handle_Data.X_R,
+                    BL_Instance.Rocker_Handle_Data.Y_R,
+                    BL_Instance.Rocker_Handle_Data.L1,
+                    BL_Instance.Rocker_Handle_Data.L2,
+                    BL_Instance.Rocker_Handle_Data.R1,
+                    BL_Instance.Rocker_Handle_Data.R2,
+                    BL_Instance.Rocker_Handle_Data.K1,
+                    BL_Instance.Rocker_Handle_Data.K2,
+                    BL_Instance.Rocker_Handle_Data.K3,
+                    BL_Instance.Rocker_Handle_Data.K4);
         break;
     case MODE_HANDLE:
-        Uart_printf(&huart1, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\r\n",
-                    Instance.X_L,
-                    Instance.Y_L,
-                    Instance.Rocker_Handle_Data.X_R,
-                    Instance.Rocker_Handle_Data.Y_R,
-                    Instance.Dif_Data.Handle_Data.Up,
-                    Instance.Dif_Data.Handle_Data.Back,
-                    Instance.Dif_Data.Handle_Data.Left,
-                    Instance.Dif_Data.Handle_Data.Right,
-                    Instance.Dif_Data.Handle_Data.A,
-                    Instance.Dif_Data.Handle_Data.B,
-                    Instance.Dif_Data.Handle_Data.X,
-                    Instance.Dif_Data.Handle_Data.Y,
-                    Instance.Rocker_Handle_Data.L1,
-                    Instance.Rocker_Handle_Data.L2,
-                    Instance.Rocker_Handle_Data.R1,
-                    Instance.Rocker_Handle_Data.R2,
-                    Instance.Rocker_Handle_Data.K1,
-                    Instance.Rocker_Handle_Data.K2,
-                    Instance.Rocker_Handle_Data.K3,
-                    Instance.Rocker_Handle_Data.K4);
+        Uart_printf(&UART_DEBUG, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\r\n",
+                    BL_Instance.X_L,
+                    BL_Instance.Y_L,
+                    BL_Instance.Rocker_Handle_Data.X_R,
+                    BL_Instance.Rocker_Handle_Data.Y_R,
+                    BL_Instance.Dif_Data.Handle_Data.Up,
+                    BL_Instance.Dif_Data.Handle_Data.Back,
+                    BL_Instance.Dif_Data.Handle_Data.Left,
+                    BL_Instance.Dif_Data.Handle_Data.Right,
+                    BL_Instance.Dif_Data.Handle_Data.A,
+                    BL_Instance.Dif_Data.Handle_Data.B,
+                    BL_Instance.Dif_Data.Handle_Data.X,
+                    BL_Instance.Dif_Data.Handle_Data.Y,
+                    BL_Instance.Rocker_Handle_Data.L1,
+                    BL_Instance.Rocker_Handle_Data.L2,
+                    BL_Instance.Rocker_Handle_Data.R1,
+                    BL_Instance.Rocker_Handle_Data.R2,
+                    BL_Instance.Rocker_Handle_Data.K1,
+                    BL_Instance.Rocker_Handle_Data.K2,
+                    BL_Instance.Rocker_Handle_Data.K3,
+                    BL_Instance.Rocker_Handle_Data.K4);
         break;
     case MODE_GRAVITY:
-        Uart_printf(&huart1, "%d,%d,%d\r\n",
-                    Instance.X_L,
-                    Instance.Y_L,
-                    Instance.Dif_Data.Gravity_Data.G_Yaw);
+        Uart_printf(&UART_DEBUG, "%d,%d\r\n",
+                    BL_Instance.X_L,
+                    BL_Instance.Y_L);
         break;
     default:
         break;
     }
 }
 
+/**
+ * @brief 通过PS2手柄调试数据输出
+ */
 void Debug_PS2(void)
 {
-    Uart_printf(&huart1, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\r\n",
+    Uart_printf(&UART_DEBUG, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\r\n",
                 JoystickStruct.select,
                 JoystickStruct.button_L,
                 JoystickStruct.button_R,
@@ -93,6 +101,21 @@ void Debug_PS2(void)
                 JoystickStruct.RJoy_UD,
                 JoystickStruct.LJoy_LR,
                 JoystickStruct.LJoy_UD);
+}
+
+/**
+ * @brief 通过UART调试底盘数据输出
+ */
+void Debug_Chassis(void)
+{
+    Uart_printf(&UART_DEBUG, "%d,%d,%d,%d,%d,%d\r\n",
+                CH_Instance.Move.x,
+                CH_Instance.Move.y,
+                CH_Instance.Move.w,
+                (int8_t)CH_Instance.Status,
+                (int8_t)CH_Instance.Control_Mode,
+                (int8_t)CH_Instance.Vision_Mode
+    );
 }
 
 /**

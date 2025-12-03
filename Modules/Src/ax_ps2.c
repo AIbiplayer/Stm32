@@ -82,7 +82,6 @@ static uint8_t PS2_ReadWriteData(uint8_t data)
   */
 void AX_PS2_ScanKey(void)
 {
-
     uint8_t i;
     //使能手柄
     CS_L();
@@ -95,8 +94,25 @@ void AX_PS2_ScanKey(void)
     //关闭使能
     CS_H();
     //数值传递
+    JoystickStruct.select_last = JoystickStruct.select;
+    JoystickStruct.select_mode_last = JoystickStruct.select_mode;
     JoystickStruct.select = ~PS2_data[3] >> 0;
+    JoystickStruct.select_mode = JoystickStruct.select && !JoystickStruct.select_last
+                                     ? !JoystickStruct.select_mode
+                                     : JoystickStruct.select_mode;
+
+    JoystickStruct.button_R_Last = JoystickStruct.button_R;
     JoystickStruct.button_R = ~PS2_data[3] >> 2;
+    JoystickStruct.Vision_Mode = JoystickStruct.button_R && !JoystickStruct.button_R_Last
+                                     ? (JoystickStruct.Vision_Mode + 1) % 4
+                                     : JoystickStruct.Vision_Mode;
+
+    JoystickStruct.Triangle_Last = JoystickStruct.Triangle;
+    JoystickStruct.Triangle = ~PS2_data[4] >> 4;
+    JoystickStruct.Control_Mode = JoystickStruct.Triangle && !JoystickStruct.Triangle_Last
+                                      ? !JoystickStruct.Control_Mode
+                                      : JoystickStruct.Control_Mode;
+
     JoystickStruct.button_L = ~PS2_data[3] >> 1;
     JoystickStruct.start = ~PS2_data[3] >> 3;
     JoystickStruct.up = ~PS2_data[3] >> 4;
@@ -107,14 +123,13 @@ void AX_PS2_ScanKey(void)
     JoystickStruct.L2 = ~PS2_data[4] >> 0;
     JoystickStruct.R1 = ~PS2_data[4] >> 3;
     JoystickStruct.R2 = ~PS2_data[4] >> 1;
-    JoystickStruct.Triangle = ~PS2_data[4] >> 4;
     JoystickStruct.Circle = ~PS2_data[4] >> 5;
     JoystickStruct.Cross = ~PS2_data[4] >> 6;
     JoystickStruct.Square = ~PS2_data[4] >> 7;
-    JoystickStruct.RJoy_LR = (int16_t)(PS2_data[5] - 128);
-    JoystickStruct.RJoy_UD = (int16_t)(PS2_data[6] - 127);
-    JoystickStruct.LJoy_LR = (int16_t)(PS2_data[7] - 128);
-    JoystickStruct.LJoy_UD = (int16_t)(PS2_data[8] - 127);
+    JoystickStruct.RJoy_LR = -(int16_t)(PS2_data[5] - 128);
+    JoystickStruct.RJoy_UD = -(int16_t)(PS2_data[6] - 127);
+    JoystickStruct.LJoy_LR = -(int16_t)(PS2_data[7] - 128);
+    JoystickStruct.LJoy_UD = -(int16_t)(PS2_data[8] - 127);
 }
 
 /******************* (C) 版权 2022 XTARK **************************************/

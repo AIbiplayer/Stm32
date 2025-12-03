@@ -18,11 +18,15 @@
 
 typedef struct
 {
-    int16_t Speed : 15; //电机速度
-    int16_t Direction : 1; //电机方向
+    int16_t Speed; //目标速度
     PID_Typedef PID; //电机速度PID结构体
-} Motor;
+    float PID_Output; //PID输出
+    TIM_HandleTypeDef* TIMx; //电机对应的定时器
+    int16_t (*Motor_GetSpeed)(TIM_HandleTypeDef*); //电机速度
+} Motor_Instance_s;
 
-void Motor_Init(void);
+void MG310_Init(void);
+void MG310_Drive(void);
+int16_t GetSpeed(TIM_HandleTypeDef* htim);
 
 #endif //MG310_H

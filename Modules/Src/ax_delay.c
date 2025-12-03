@@ -28,6 +28,7 @@
 
 #include "ax_delay.h"
 #include "main.h"
+#include "Debug_Tool.h"
 
 
 // /**
@@ -37,11 +38,10 @@
 //   */
 void AX_DELAY_Init(void)
 {
-
-	/* 延时函数 SysTick 配置 */
-	// SysTick_CLKSourceConfig(SysTick_CLKSource_HCLK_Div8); 	//时钟固定为AHB时钟的1/8
-	// 清除 CLKSOURCE 位（置 0），选择 HCLK/8 作为时钟源
-	SysTick->CTRL &= ~SysTick_CTRL_CLKSOURCE_Msk;
+    /* 延时函数 SysTick 配置 */
+    // SysTick_CLKSourceConfig(SysTick_CLKSource_HCLK_Div8); 	//时钟固定为AHB时钟的1/8
+    // 清除 CLKSOURCE 位（置 0），选择 HCLK/8 作为时钟源
+    SysTick->CTRL &= ~SysTick_CTRL_CLKSOURCE_Msk;
 }
 
 /**
@@ -51,21 +51,20 @@ void AX_DELAY_Init(void)
   */
 void AX_Delayus(uint32_t us)
 {
-	uint32_t temp;
+    uint32_t temp;
 
-	SysTick->LOAD=21*us;
-	SysTick->VAL=0x00;
-	SysTick->CTRL|=SysTick_CTRL_ENABLE_Msk ;
+    SysTick->LOAD = 21 * us;
+    SysTick->VAL = 0x00;
+    SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
 
-	do
-	{
-		temp=SysTick->CTRL;
-	}
-	while((temp&0x01)&&!(temp&(1<<16)));
+    do
+    {
+        temp = SysTick->CTRL;
+    }
+    while ((temp & 0x01) && !(temp & (1 << 16)));
 
-	SysTick->CTRL&=~SysTick_CTRL_ENABLE_Msk;
-	SysTick->VAL =0X00;
-
+    SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
+    SysTick->VAL = 0X00;
 }
 
 /**
@@ -77,19 +76,20 @@ void AX_Delayus(uint32_t us)
   */
 static void Delay_ms(uint16_t ms)
 {
-	uint32_t temp;
+    uint32_t temp;
 
-	SysTick->LOAD=(uint32_t)21000*ms;
-	SysTick->VAL =0x00;
-	SysTick->CTRL|=SysTick_CTRL_ENABLE_Msk;
+    SysTick->LOAD = (uint32_t)21000 * ms;
+    SysTick->VAL = 0x00;
+    SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
 
-	do
-	{
-		temp=SysTick->CTRL;
-	}while((temp&0x01)&&!(temp&(1<<16)));
+    do
+    {
+        temp = SysTick->CTRL;
+    }
+    while ((temp & 0x01) && !(temp & (1 << 16)));
 
-	SysTick->CTRL&=~SysTick_CTRL_ENABLE_Msk;
-	SysTick->VAL =0X00;
+    SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
+    SysTick->VAL = 0X00;
 }
 
 
@@ -100,19 +100,19 @@ static void Delay_ms(uint16_t ms)
   */
 void AX_Delayms(uint16_t ms)
 {
-	uint8_t repeat=ms/500;
-	uint16_t remain=ms%500;
+    uint8_t repeat = ms / 500;
+    uint16_t remain = ms % 500;
 
-	while(repeat)
-	{
-		Delay_ms(500);
-		repeat--;
-	}
+    while (repeat)
+    {
+        Delay_ms(500);
+        repeat--;
+    }
 
-	if(remain)
-	{
-		Delay_ms(remain);
-	}
+    if (remain)
+    {
+        Delay_ms(remain);
+    }
 }
 
 

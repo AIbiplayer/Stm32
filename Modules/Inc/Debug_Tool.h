@@ -13,6 +13,7 @@
 #define CCMRAM_DATA __attribute__((section(".ccmram_data")))
 
 void Uart_printf(UART_HandleTypeDef* huart, char* format, ...);
+void Debug_Chassis(void);
 void Debug_Bluetooth(void);
 void Debug_PS2(void);
 void BUZZ_ON(void);

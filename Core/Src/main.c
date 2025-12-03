@@ -31,6 +31,7 @@
 #include "Debug_Tool.h"
 #include "ax_delay.h"
 #include "ax_ps2.h"
+#include "Cmd_Task.h"
 
 /* USER CODE END Includes */
 
@@ -72,6 +73,7 @@ void SystemClock_Config(void);
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -109,8 +111,8 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
-  Bluetooth_Start();
-  AX_DELAY_Init();
+    Bluetooth_Start();
+    AX_DELAY_Init();
 
   /* USER CODE END 2 */
 
@@ -118,9 +120,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
     while (1)
     {
-      AX_PS2_ScanKey();
-      Debug_PS2();
-      AX_Delayms(30);
+        Cmd_Task();
+        Debug_Chassis();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
