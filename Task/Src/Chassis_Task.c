@@ -12,7 +12,7 @@
 #include "Debug_Tool.h"
 
 CCMRAM_DATA Chassis_Instance_s CH_Instance = {
-    CHASSIS_STOP, PS2_MODE, NONE_VISION,
+    CHASSIS_MEC, PS2_MODE, NONE_VISION,
     {0, 0, 0}, {0, 0, 0, 0}
 };
 
@@ -35,7 +35,7 @@ CCMRAM_CODE void Chassis_Behavior(void)
 {
     switch (CH_Instance.Status) //底盘模式
     {
-    case CHASSIS_OMNI: // 三轮模式
+    case CHASSIS_OMNI_TRI: // 三轮模式
         CH_Instance.Speed_Set[0] = CH_Instance.Move.y
             + CH_Instance.Move.w;
         CH_Instance.Speed_Set[1] = sin(60 * PI / 180) * CH_Instance.Move.x
@@ -59,11 +59,13 @@ CCMRAM_CODE void Chassis_Behavior(void)
             + CH_Instance.Move.y
             + CH_Instance.Move.w;
         break;
-    case CHASSIS_STOP: // 停止模式
-        memset(CH_Instance.Speed_Set, 0, sizeof(CH_Instance.Speed_Set));
+    case CHASSIS_OMNI_SQU: // 四轮全向轮模式
+        CH_Instance.Speed_Set[0] = CH_Instance.Move.x + CH_Instance.Move.y + CH_Instance.Move.w;
+        CH_Instance.Speed_Set[1] = -CH_Instance.Move.x + CH_Instance.Move.y + CH_Instance.Move.w;
+        CH_Instance.Speed_Set[2] = -CH_Instance.Move.x - CH_Instance.Move.y + CH_Instance.Move.w;
+        CH_Instance.Speed_Set[3] = CH_Instance.Move.x - CH_Instance.Move.y + CH_Instance.Move.w;
         break;
     default:
-        CH_Instance.Status = CHASSIS_STOP;
         break;
     }
 }

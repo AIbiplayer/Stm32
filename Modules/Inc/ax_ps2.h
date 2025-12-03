@@ -58,7 +58,7 @@ typedef struct
     uint8_t R2 : 1;
     uint8_t Triangle : 1;
     uint8_t Triangle_Last : 1;
-    uint8_t Control_Mode : 1;
+    uint8_t Control_Mode : 2;
     uint8_t Circle : 1;
     uint8_t Cross : 1;
     uint8_t Square : 1;

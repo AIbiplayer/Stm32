@@ -14,9 +14,9 @@
 
 typedef enum // 底盘模式
 {
-    CHASSIS_OMNI = 0, //三轮全向轮模式
-    CHASSIS_MEC, //四轮麦克纳姆轮模式
-    CHASSIS_STOP, //旋转模式，仅在红外线用
+    CHASSIS_MEC = 0, //四轮麦克纳姆轮模式
+    CHASSIS_OMNI_TRI, //三轮全向轮模式
+    CHASSIS_OMNI_SQU // //四轮全向轮模式
 } Chassis_Status_e;
 
 typedef struct // 移动结构体

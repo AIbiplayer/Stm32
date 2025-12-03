@@ -110,7 +110,7 @@ void AX_PS2_ScanKey(void)
     JoystickStruct.Triangle_Last = JoystickStruct.Triangle;
     JoystickStruct.Triangle = ~PS2_data[4] >> 4;
     JoystickStruct.Control_Mode = JoystickStruct.Triangle && !JoystickStruct.Triangle_Last
-                                      ? !JoystickStruct.Control_Mode
+                                      ? (JoystickStruct.Control_Mode + 1) % 4
                                       : JoystickStruct.Control_Mode;
 
     JoystickStruct.button_L = ~PS2_data[3] >> 1;

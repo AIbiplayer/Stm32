@@ -101,8 +101,12 @@ CCMRAM_CODE void Key_Setting(void)
             CH_Instance.Move.x = BL_Instance.X_L;
             CH_Instance.Move.y = BL_Instance.Y_L;
             CH_Instance.Move.w = BL_Instance.Rocker_Handle_Data.Y_R;
-            CH_Instance.Status = BL_Instance.Rocker_Handle_Data.K1 ? CHASSIS_MEC : CHASSIS_OMNI;
-            CH_Instance.Vision_Mode = NONE_VISION;
+            if (!BL_Instance.Rocker_Handle_Data.K1 && !BL_Instance.Rocker_Handle_Data.K2)
+                CH_Instance.Status = CHASSIS_MEC;
+            else if (!BL_Instance.Rocker_Handle_Data.K1 && BL_Instance.Rocker_Handle_Data.K2)
+                CH_Instance.Status = CHASSIS_OMNI_TRI;
+            else if (BL_Instance.Rocker_Handle_Data.K1 && !BL_Instance.Rocker_Handle_Data.K2)
+                CH_Instance.Status = CHASSIS_OMNI_SQU;
             /*
              *这里扩展视觉和云台部分
              */
@@ -111,8 +115,12 @@ CCMRAM_CODE void Key_Setting(void)
             CH_Instance.Move.x = BL_Instance.X_L;
             CH_Instance.Move.y = BL_Instance.Y_L;
             CH_Instance.Move.w = BL_Instance.Rocker_Handle_Data.Y_R;
-            CH_Instance.Status = BL_Instance.Rocker_Handle_Data.K1 ? CHASSIS_MEC : CHASSIS_OMNI;
-
+            if (!BL_Instance.Rocker_Handle_Data.K1 && !BL_Instance.Rocker_Handle_Data.K2)
+                CH_Instance.Status = CHASSIS_MEC;
+            else if (!BL_Instance.Rocker_Handle_Data.K1 && BL_Instance.Rocker_Handle_Data.K2)
+                CH_Instance.Status = CHASSIS_OMNI_TRI;
+            else if (BL_Instance.Rocker_Handle_Data.K1 && !BL_Instance.Rocker_Handle_Data.K2)
+                CH_Instance.Status = CHASSIS_OMNI_SQU;
             /*
             *这里扩展视觉和云台部分
             */
@@ -140,7 +148,21 @@ CCMRAM_CODE void Key_Setting(void)
             CH_Instance.Move.x = JoystickStruct.LJoy_UD / 1.5f;
             CH_Instance.Move.y = JoystickStruct.LJoy_LR / 1.5f;
             CH_Instance.Move.w = JoystickStruct.RJoy_LR / 1.5f;
-            CH_Instance.Status = JoystickStruct.Control_Mode ? CHASSIS_MEC : CHASSIS_OMNI;
+            switch (JoystickStruct.Control_Mode)
+            {
+            case 0:
+                CH_Instance.Status = CHASSIS_MEC;
+                break;
+            case 1:
+                CH_Instance.Status = CHASSIS_OMNI_TRI;
+                break;
+            case 2:
+                CH_Instance.Status = CHASSIS_OMNI_SQU;
+                break;
+            default:
+                CH_Instance.Status = CHASSIS_MEC;
+                break;
+            }
             CH_Instance.Vision_Mode = JoystickStruct.button_R && !JoystickStruct.button_R_Last
                                           ? (CH_Instance.Vision_Mode + 1) % 4
                                           : CH_Instance.Vision_Mode;
