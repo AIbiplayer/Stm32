@@ -25,16 +25,16 @@
 
 #define INS_TASK_PERIOD 1
 
-typedef struct
-{
-    float Gyro[3];  // 角速度
-    float Accel[3]; // 加速度
-    // 还需要增加角速度数据
-    float Roll;
-    float Pitch;
-    float Yaw;
-    float YawTotalAngle;
-} attitude_t; // 最终解算得到的角度,以及yaw转动的总角度(方便多圈控制)
+// typedef struct
+// {
+//     float Gyro[3];  // 角速度
+//     float Accel[3]; // 加速度
+//     // 还需要增加角速度数据
+//     float Roll;
+//     float Pitch;
+//     float Yaw;
+//     float YawTotalAngle;
+// } attitude_t; // 最终解算得到的角度,以及yaw转动的总角度(方便多圈控制)
 
 typedef struct
 {
@@ -82,7 +82,7 @@ typedef struct
  * @brief 初始化惯导解算系统
  *
  */
-attitude_t *INS_Init(void);
+INS_t *INS_Init(void);
 
 /**
  * @brief 此函数放入实时系统中,以1kHz频率运行

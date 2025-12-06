@@ -2,7 +2,6 @@
 #include "string.h"
 #include "bsp_usart.h"
 #include "stdlib.h"
-#include "daemon.h"
 #include "FreeRTOS.h"
 #include "semphr.h"
 #include "cmsis_os.h"
@@ -20,7 +19,6 @@ static uint8_t rc_init_flag = 0; // 遥控器初始化标志位
 
 // 遥控器拥有的串口实例,因为遥控器是单例,所以这里只有一个,就不封装了
 USARTInstance* rc_usart_instance;
-static DaemonInstance* rc_daemon_instance;
 
 /**
  * @brief 矫正遥控器摇杆的值,超过660或者小于-660的值都认为是无效值,置0
@@ -104,7 +102,6 @@ void sbus_to_rc(const uint8_t* sbus_buf)
  */
 static void RemoteControlRxCallback()
 {
-    DaemonReload(rc_daemon_instance); // 先喂狗
     sbus_to_rc(rc_usart_instance->recv_buff); // 进行协议解析
 }
 
@@ -130,9 +127,3 @@ RC_ctrl_t* RemoteControlInit(UART_HandleTypeDef* rc_usart_handle)
     return rc_ctrl;
 }
 
-uint8_t RemoteControlIsOnline()
-{
-    if (rc_init_flag)
-        return DaemonIsOnline(rc_daemon_instance);
-    return 0;
-}

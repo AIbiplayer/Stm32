@@ -11,11 +11,10 @@
 #include "robot_def.h"
 #include "dji_motor.h"
 #include "message_center.h"
-#include "general_def.h"
 
-attitude_t* Gimbal_IMU_Data; ///< 云台IMU数据
-DJI_Motor_Instance* Gimbal_Yaw; ///<Yaw轴电机
-DJI_Motor_Instance* Gimbal_Pitch; ///<Pitch轴电机
+CCMRAM INS_t* Gimbal_IMU_Data; ///< 云台IMU数据
+CCMRAM DJI_Motor_Instance* Gimbal_Yaw; ///<Yaw轴电机
+CCMRAM DJI_Motor_Instance* Gimbal_Pitch; ///<Pitch轴电机
 
 static Publisher_t* gimbal_pub; // 云台应用消息发布者(云台反馈给cmd)
 static Subscriber_t* gimbal_sub; // cmd控制消息订阅者
@@ -35,7 +34,7 @@ void GimbalTask(void const* argument)
     {
         SubGetMessage(gimbal_sub, &gimbal_cmd_recv);
 
-        Gimbal_Status_Serve();
+        // Gimbal_Status_Serve();
 
         PubPushMessage(gimbal_pub, &gimbal_feedback_data);
         osDelay(1);
@@ -85,7 +84,7 @@ static void Gimbal_Init(void)
 
     Gimbal.Can_Init_Config.tx_id = 1;
     Gimbal.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
-    Gimbal_Yaw = DJI_Motor_Init(&Gimbal);
+    // Gimbal_Yaw = DJI_Motor_Init(&Gimbal);
 
     gimbal_pub = PubRegister("gimbal_feed", sizeof(Gimbal_Upload_Data_s));
     gimbal_sub = SubRegister("gimbal_cmd", sizeof(Gimbal_Ctrl_Cmd_s));
@@ -111,6 +110,6 @@ static void Gimbal_Status_Serve(void)
     default:
         break;
     }
-    gimbal_feedback_data.gimbal_imu_data = *Gimbal_IMU_Data;
+    // gimbal_feedback_data.gimbal_imu_data = *Gimbal_IMU_Data;
     gimbal_feedback_data.yaw_motor_single_round_angle = (uint16_t)Gimbal_Yaw->Measure.Angle;
 }

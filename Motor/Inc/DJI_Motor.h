@@ -9,7 +9,6 @@
 #define DJI_MOTOR_H
 
 #include "Motor_Def.h"
-#include "daemon.h"
 
 #define ECD_ANGLE_COEF_DJI 0.043945f // (360/8192),将编码器值转化为角度制
 #define DJI_MOTOR_CNT 10 // 大疆电机个数
@@ -31,6 +30,7 @@ typedef struct
     int64_t Total_Angle; ///< 总角度值
 
     uint8_t Block_CNT; ///< 堵转计数
+    uint8_t Block_Flag; ///< 堵转标志
 } DJI_Motor_Measure_s; ///< 大疆电机测量值
 
 /**
@@ -42,7 +42,6 @@ typedef struct
 typedef struct
 {
     DJI_Motor_Measure_s Measure; ///< 大疆电机测量值
-    DaemonInstance* Daemon; ///< 电机保护程序
     Motor_Control_Setting_s Control_Setting;
     Motor_Working_Type_e Working_Type;
     Motor_Type_e Motor_Type;

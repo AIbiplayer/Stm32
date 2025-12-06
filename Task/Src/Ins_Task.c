@@ -20,7 +20,7 @@ void INSTask(void const* argument)
     MX_USB_DEVICE_Init();
     for (;;)
     {
-        INS_Task();
+        // INS_Task();
         osDelay(1);
     }
 }

@@ -1,7 +1,6 @@
 
 #include "master_process.h"
 #include "seasky_protocol.h"
-#include "daemon.h"
 #include "robot_def.h"
 
 

@@ -12,13 +12,12 @@
 #include "remote_control.h"
 #include "message_center.h"
 #include "robot_def.h"
-#include "Vofa_Debug.h"
 
-RC_ctrl_t* RC_data; // 遥控器数据,初始化时返回
+CCMRAM RC_ctrl_t* RC_data; // 遥控器数据,初始化时返回
 
 extern osSemaphoreId RC_Parse_FlagHandle;
 extern USARTInstance* rc_usart_instance;
-extern attitude_t* Gimbal_IMU_Data; ///< 云台IMU数据
+extern INS_t* Gimbal_IMU_Data; ///< 云台IMU数据
 
 /* cmd应用包含的模块实例指针和交互信息存储*/
 static Publisher_t* chassis_cmd_pub; // 底盘控制消息发布者
@@ -30,6 +29,11 @@ static Publisher_t* gimbal_cmd_pub; // 云台控制消息发布者
 static Subscriber_t* gimbal_feed_sub; // 云台反馈信息订阅者
 static Gimbal_Ctrl_Cmd_s gimbal_cmd_send; // 传递给云台的控制信息
 static Gimbal_Upload_Data_s gimbal_fetch_data; // 从云台获取的反馈信息
+
+static Publisher_t* shoot_cmd_pub; // 发射控制消息发布者
+static Subscriber_t* shoot_feed_sub; // 发射反馈信息订阅者
+static Shoot_Ctrl_Cmd_s shoot_cmd_send; // 传递给发射的控制信息
+static Shoot_Upload_Data_s shoot_fetch_data; // 从发射获取的反馈信息
 
 static void Robot_Cmd_Init(void);
 static void Emergency_Stop(void);
@@ -46,7 +50,7 @@ void CmdTask(void* argument)
     Robot_Cmd_Init();
 
     taskENTER_CRITICAL();
-    Gimbal_IMU_Data = INS_Init();
+    // Gimbal_IMU_Data = INS_Init();
     taskEXIT_CRITICAL();
     HAL_GPIO_WritePin(LED_B_GPIO_Port,LED_B_Pin, GPIO_PIN_SET);
 
@@ -54,11 +58,13 @@ void CmdTask(void* argument)
     {
         SubGetMessage(chassis_feed_sub, (void*)&chassis_fetch_data);
         SubGetMessage(gimbal_feed_sub, &gimbal_fetch_data);
+        SubGetMessage(shoot_feed_sub, (void*)&shoot_fetch_data);
 
         CalcOffsetAngle();
         Remote_Control_Cmd_Serve();
         DJI_Motor_Control();
 
+        PubPushMessage(shoot_cmd_pub, (void*)&shoot_cmd_send);
         PubPushMessage(chassis_cmd_pub, (void*)&chassis_cmd_send);
         PubPushMessage(gimbal_cmd_pub, (void*)&gimbal_cmd_send);
 
@@ -77,6 +83,8 @@ static void Robot_Cmd_Init(void)
     chassis_feed_sub = SubRegister("chassis_feed", sizeof(Chassis_Upload_Data_s));
     gimbal_cmd_pub = PubRegister("gimbal_cmd", sizeof(Gimbal_Ctrl_Cmd_s));
     gimbal_feed_sub = SubRegister("gimbal_feed", sizeof(Gimbal_Upload_Data_s));
+    shoot_cmd_pub = PubRegister("shoot_cmd", sizeof(Shoot_Ctrl_Cmd_s));
+    shoot_feed_sub = SubRegister("shoot_feed", sizeof(Shoot_Upload_Data_s));
 }
 
 /**
@@ -114,7 +122,19 @@ static void Remote_Control_Cmd_Serve(void)
         Emergency_Stop();
         return;
     }
+    shoot_cmd_send.shoot_mode = SHOOT_ON;
     HAL_GPIO_WritePin(LED_R_GPIO_Port,LED_R_Pin, GPIO_PIN_RESET);
+
+    abs(RC_data[TEMP].rc.dial) > 100
+        ? (shoot_cmd_send.friction_mode = FRICTION_ON)
+        : (shoot_cmd_send.friction_mode = FRICTION_OFF);
+    if (RC_data[TEMP].rc.dial > 500)
+        shoot_cmd_send.load_mode = LOAD_BURSTFIRE; //连发
+    else if (RC_data[TEMP].rc.dial < -500)
+        shoot_cmd_send.load_mode = LOAD_1_BULLET; //单发
+    else
+        shoot_cmd_send.load_mode = LOAD_STOP; //停止
+
     //两杆为中间，小陀螺模式
     if (switch_is_mid(RC_data[TEMP].rc.switch_left) && switch_is_mid(RC_data[TEMP].rc.switch_right))
     {
@@ -122,17 +142,24 @@ static void Remote_Control_Cmd_Serve(void)
         chassis_cmd_send.chassis_last_mode = CHASSIS_ROTATE;
         gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
     }
-    // 两杆为上边，随云台转动
-    else if (switch_is_up(RC_data[TEMP].rc.switch_left) && switch_is_up(RC_data[TEMP].rc.switch_right))
+    // 左杆在中，右杆在上，随云台转动
+    else if (switch_is_mid(RC_data[TEMP].rc.switch_left) && switch_is_up(RC_data[TEMP].rc.switch_right))
     {
         chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
         chassis_cmd_send.chassis_last_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
+        gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
+    }
+    else if (switch_is_mid(RC_data[TEMP].rc.switch_left) && switch_is_down(RC_data[TEMP].rc.switch_right))
+    {
+        chassis_cmd_send.chassis_mode = CHASSIS_NO_FOLLOW;
+        chassis_cmd_send.chassis_last_mode = CHASSIS_NO_FOLLOW;
         gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
     }
     if (gimbal_cmd_send.gimbal_mode == GIMBAL_GYRO_MODE)
     {
         gimbal_cmd_send.yaw -= 0.00034f * (float)RC_data[TEMP].rc.rocker_r_;
         // gimbal_cmd_send.pitch += 0.00078f * (float)RC_data[TEMP].rc.rocker_l1;
+        shoot_cmd_send.shoot_rate = shoot_cmd_send.load_mode == LOAD_BURSTFIRE ? 2.0f : 0.0f;
     }
     chassis_cmd_send.vy = (float)RC_data->rc.rocker_l1 * 2;
     chassis_cmd_send.chassis_mode == CHASSIS_INDEPENDENCE
@@ -147,5 +174,9 @@ static void Emergency_Stop(void)
 {
     chassis_cmd_send.chassis_mode = CHASSIS_ZERO_FORCE;
     gimbal_cmd_send.gimbal_mode = GIMBAL_ZERO_FORCE;
+    shoot_cmd_send.shoot_mode = SHOOT_OFF;
+    shoot_cmd_send.friction_mode = FRICTION_OFF;
+    shoot_cmd_send.load_mode = LOAD_STOP;
+
     HAL_GPIO_WritePin(LED_R_GPIO_Port, LED_R_Pin, GPIO_PIN_SET);
 }

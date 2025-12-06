@@ -98,7 +98,6 @@ typedef enum
     LOAD_STOP = 0, // 停止发射
     LOAD_REVERSE, // 反转
     LOAD_1_BULLET, // 单发
-    LOAD_3_BULLET, // 三发
     LOAD_BURSTFIRE, // 连发
 } loader_mode_e;
 
@@ -178,15 +177,13 @@ typedef struct
 
 typedef struct
 {
-    attitude_t gimbal_imu_data;
+    INS_t gimbal_imu_data;
     uint16_t yaw_motor_single_round_angle;
 } Gimbal_Upload_Data_s;
 
-// typedef struct
-// {
-//     // code to go here
-//     // ...
-// } Shoot_Upload_Data_s;
+typedef struct
+{
+} Shoot_Upload_Data_s;
 
 #pragma pack() // 开启字节对齐,结束前面的#pragma pack(1)
 

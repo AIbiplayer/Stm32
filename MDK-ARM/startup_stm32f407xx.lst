@@ -856,10 +856,11 @@ ty/FreeRTOS/Source/CMSIS_RTOS_V2 -I../Middlewares/Third_Party/FreeRTOS/Source/p
 ortable/RVDS/ARM_CM4F -I../Middlewares/ST/STM32_USB_Device_Library/Core/Inc -I.
 ./Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc -I../Drivers/CMSIS/Devi
 ce/ST/STM32F4xx/Include -I../Drivers/CMSIS/Include -I../Middlewares/ST/ARM/DSP/
-Inc -I.\RTE\_Robot-Framework -I"F:\Keil 5\ARM\PACK\ARM\CMSIS\5.9.0\CMSIS\Core\I
-nclude" --predefine="__UVISION_VERSION SETA 539" --predefine="_RTE_ SETA 1" --p
-redefine="STM32F407xx SETA 1" --predefine="_RTE_ SETA 1" --list=startup_stm32f4
-07xx.lst startup_stm32f407xx.s
+Inc -IF:\STM32CubeCLT_1.18.0\GNU-tools-for-STM32\arm-none-eabi\include -I.\RTE\
+_Robot-Framework -I"F:\Keil 5\ARM\PACK\ARM\CMSIS\5.9.0\CMSIS\Core\Include" --pr
+edefine="__UVISION_VERSION SETA 539" --predefine="_RTE_ SETA 1" --predefine="ST
+M32F407xx SETA 1" --predefine="_RTE_ SETA 1" --list=startup_stm32f407xx.lst sta
+rtup_stm32f407xx.s
 
 
 

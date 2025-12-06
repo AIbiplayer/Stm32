@@ -74,7 +74,6 @@ typedef struct
     Feedforward_Type_e Feedforward_Flag; // 前馈标志
     float* Speed_Feedforward_Ptr; // 速度前馈指针
 
-
     PID_Typedef Speed_PID;
     PID_Typedef Angle_PID;
 

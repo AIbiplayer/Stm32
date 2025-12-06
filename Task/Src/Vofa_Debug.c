@@ -8,6 +8,7 @@
 #include "Vofa_Debug.h"
 #include "bsp_usart.h"
 #include "usart.h"
+#include "DJI_Motor.h"
 #include "remote_control.h"
 #include "INS.h"
 

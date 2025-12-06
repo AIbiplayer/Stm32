@@ -13,9 +13,9 @@
 #include "math.h"
 #include "robot_def.h"
 
-static float chassis_vx, chassis_vy, chassis_vw; // 将云台系的速度投影到底盘
-static float Chassis_V1, Chassis_V2, Chassis_V3, Chassis_V4; // 四轮速度
-static DJI_Motor_Instance* Omni_Wheel[4];
+CCMRAM static float chassis_vx, chassis_vy, chassis_vw; // 将云台系的速度投影到底盘
+CCMRAM static float Chassis_V1, Chassis_V2, Chassis_V3, Chassis_V4; // 四轮速度
+CCMRAM static DJI_Motor_Instance* Omni_Wheel[4];
 static Chassis_Ctrl_Cmd_s chassis_cmd_recv; // 底盘接收到的控制命令
 static Chassis_Upload_Data_s chassis_feedback_data; // 底盘回传的反馈数据
 static Publisher_t* chassis_pub; // 用于发布底盘的数据
@@ -53,7 +53,7 @@ void ChassisTask(void* argument)
 static void Chassis_Init(void)
 {
     //初始化电机模型
-    Motor_Init_s Omni_Chassis = {
+    Motor_Init_s Mec_Chassis = {
         .Can_Init_Config = {.can_handle = &hcan1},
         .Control_Setting = {
             .Loop_Control = SPEED_CONTROL,
@@ -68,7 +68,7 @@ static void Chassis_Init(void)
         .Working_Type = MOTOR_ENABLE
     };
     //初始化PID参数
-    PID_Param(&Omni_Chassis.Control_Setting.Speed_PID,
+    PID_Param(&Mec_Chassis.Control_Setting.Speed_PID,
               25,
               0,
               0,
@@ -77,7 +77,7 @@ static void Chassis_Init(void)
               100,
               1000,
               8000);
-    PID_Param(&Omni_Chassis.Control_Setting.Angle_PID,
+    PID_Param(&Mec_Chassis.Control_Setting.Angle_PID,
               0.0f,
               0.0f,
               0,
@@ -87,21 +87,21 @@ static void Chassis_Init(void)
               1000,
               8000);
 
-    Omni_Chassis.Can_Init_Config.tx_id = 1;
-    Omni_Chassis.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
-    Omni_Wheel[0] = DJI_Motor_Init(&Omni_Chassis);
+    Mec_Chassis.Can_Init_Config.tx_id = 1;
+    Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
+    Omni_Wheel[0] = DJI_Motor_Init(&Mec_Chassis);
 
-    Omni_Chassis.Can_Init_Config.tx_id = 2;
-    Omni_Chassis.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
-    Omni_Wheel[1] = DJI_Motor_Init(&Omni_Chassis);
+    Mec_Chassis.Can_Init_Config.tx_id = 2;
+    Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
+    Omni_Wheel[1] = DJI_Motor_Init(&Mec_Chassis);
 
-    Omni_Chassis.Can_Init_Config.tx_id = 3;
-    Omni_Chassis.Control_Setting.Reverse_Flag = MOTOR_REVERSE;
-    Omni_Wheel[2] = DJI_Motor_Init(&Omni_Chassis);
+    Mec_Chassis.Can_Init_Config.tx_id = 3;
+    Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_REVERSE;
+    Omni_Wheel[2] = DJI_Motor_Init(&Mec_Chassis);
 
-    Omni_Chassis.Can_Init_Config.tx_id = 4;
-    Omni_Chassis.Control_Setting.Reverse_Flag = MOTOR_REVERSE;
-    Omni_Wheel[3] = DJI_Motor_Init(&Omni_Chassis);
+    Mec_Chassis.Can_Init_Config.tx_id = 4;
+    Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_REVERSE;
+    Omni_Wheel[3] = DJI_Motor_Init(&Mec_Chassis);
 
     chassis_sub = SubRegister("chassis_cmd", sizeof(Chassis_Ctrl_Cmd_s));
     chassis_pub = PubRegister("chassis_feed", sizeof(Chassis_Upload_Data_s));

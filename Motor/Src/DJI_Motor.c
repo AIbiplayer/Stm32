@@ -10,13 +10,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include "stdbool.h"
-#include "daemon.h"
 
 static uint8_t Idx = 0; ///< 电机索引
 static bool Send_Enable_Flag[6]; ///< 六组电机发送标志位，哪一个为True说明哪一个可以发送
 static DJI_Motor_Instance* Instance_Group[DJI_MOTOR_CNT]; ///< 把所有电机实例放到一个组，之后统一进行PID计算，注意这里是指针类型
 
 extern DJI_Motor_Instance* Gimbal_Yaw; ///<Yaw轴电机
+extern DJI_Motor_Instance* Load_bullet;
 
 /**
  * @brief 由于DJI电机发送以四个一组的形式进行,故对其进行特殊处理,用6个(2can*3group)can_instance专门负责发送
@@ -25,6 +25,7 @@ extern DJI_Motor_Instance* Gimbal_Yaw; ///<Yaw轴电机
  * C610(m2006)/C620(m3508):0x200,0x1ff,0x200;
  * GM6020:0x1fe,0x2fe
  * 反馈(rx_id): GM6020: 0x204+id ; C610/C620: 0x200+id
+ * @todo 后续使用双板，由于电调ID会存在冲突，后续要考虑更改分配方式
  * can1: [0]:0x1Ff,[1]:0x200,[2]:0x2FF
  * can2: [3]:0x1Fe,[4]:0x200,[5]:0x2FF
  */
@@ -38,7 +39,7 @@ static CANInstance sender_assignment[6] = {
         .txconf.DLC = 0x08, .tx_buff = {0}
     },
     [2] = {
-        .can_handle = &hcan1, .txconf.StdId = 0x2ff, .txconf.IDE = CAN_ID_STD, .txconf.RTR = CAN_RTR_DATA,
+        .can_handle = &hcan1, .txconf.StdId = 0x1ff, .txconf.IDE = CAN_ID_STD, .txconf.RTR = CAN_RTR_DATA,
         .txconf.DLC = 0x08, .tx_buff = {0}
     },
     [3] = {
@@ -50,7 +51,7 @@ static CANInstance sender_assignment[6] = {
         .txconf.DLC = 0x08, .tx_buff = {0}
     },
     [5] = {
-        .can_handle = &hcan2, .txconf.StdId = 0x2ff, .txconf.IDE = CAN_ID_STD, .txconf.RTR = CAN_RTR_DATA,
+        .can_handle = &hcan2, .txconf.StdId = 0x1ff, .txconf.IDE = CAN_ID_STD, .txconf.RTR = CAN_RTR_DATA,
         .txconf.DLC = 0x08, .tx_buff = {0}
     },
 };
@@ -93,8 +94,8 @@ static void Motor_Grouping(DJI_Motor_Instance* DJI_Motor, CAN_Init_Config_s* Con
     switch (DJI_Motor->Motor_Type)
     {
     case M2006:
-        Group = 1; // M2006电机由CAN1发送
-        InGroup_ID = Motor_ID;
+        Group = 2; // M2006电机由CAN1发送
+        InGroup_ID = Motor_ID - 4;
         Config->rx_id = 0x200 + Motor_ID + 1;
         Send_Enable_Flag[Group] = true;
         DJI_Motor->Send_Group = Group;
@@ -109,21 +110,13 @@ static void Motor_Grouping(DJI_Motor_Instance* DJI_Motor, CAN_Init_Config_s* Con
         else
         {
             InGroup_ID = Motor_ID - 4;
-            Group = Config->can_handle == &hcan1 ? 0 : 3;
+            Group = Config->can_handle == &hcan1 ? 2 : 5;
         }
         Config->rx_id = 0x200 + Motor_ID + 1;
         Send_Enable_Flag[Group] = true;
         DJI_Motor->Send_Group = Group;
         DJI_Motor->Message_Num = InGroup_ID;
 
-        for (uint8_t i = 0; i < Idx; ++i) //检查ID是否发生冲突
-        {
-            if (Instance_Group[i]->Motor_Can_Instance->can_handle == Config->can_handle &&
-                Instance_Group[i]->Motor_Can_Instance->rx_id == Config->rx_id)
-            {
-                // uint16_t can_bus = config->can_handle == &hcan1 ? 1 : 2;
-            }
-        }
         break;
     case GM6020:
         if (Motor_ID < 4)
@@ -140,15 +133,6 @@ static void Motor_Grouping(DJI_Motor_Instance* DJI_Motor, CAN_Init_Config_s* Con
         Send_Enable_Flag[Group] = true;
         DJI_Motor->Send_Group = Group;
         DJI_Motor->Message_Num = InGroup_ID;
-
-        for (uint8_t i = 0; i < Idx; ++i) //检查ID是否发生冲突
-        {
-            if (Instance_Group[i]->Motor_Can_Instance->can_handle == Config->can_handle &&
-                Instance_Group[i]->Motor_Can_Instance->rx_id == Config->rx_id)
-            {
-                // uint16_t can_bus = config->can_handle == &hcan1 ? 1 : 2;
-            }
-        }
         break;
     default:
         break;
@@ -167,10 +151,6 @@ static void Decode_DJI_Motor(CANInstance* Instance)
     DJI_Motor_Instance* DJI_Instance = (DJI_Motor_Instance*)Instance->id;
     DJI_Motor_Measure_s* Measure = &DJI_Instance->Measure;
 
-    DaemonReload(DJI_Instance->Daemon);
-
-    DJI_Instance->dt = DWT_GetDeltaT(&DJI_Instance->Feed_Cnt);
-
     Measure->Last_Ecd = Measure->Ecd;
     Measure->Ecd = (uint16_t)Rx_Buff[0] << 8 | Rx_Buff[1];
     Measure->Angle = ((float)Measure->Ecd * ECD_ANGLE_COEF_DJI);
@@ -179,7 +159,7 @@ static void Decode_DJI_Motor(CANInstance* Instance)
         CURRENT_SMOOTH_COEF * (float)((int16_t)(Rx_Buff[4] << 8 | Rx_Buff[5]));
     Measure->Temp = Rx_Buff[6];
 
-    if (DJI_Instance == Gimbal_Yaw) //yaw/拨盘 电机多圈记录
+    if (DJI_Instance == Gimbal_Yaw || DJI_Instance == Load_bullet) //yaw/拨盘 电机多圈记录
     {
         if (Measure->Ecd - Measure->Last_Ecd > 4096)
             Measure->Total_Round--;
@@ -275,6 +255,8 @@ void DJI_MotorEnable(DJI_Motor_Instance* motor)
 void DJI_MotorChangeLoop(DJI_Motor_Instance* motor, const Motor_Loop_Control_Type_e Loop)
 {
     motor->Control_Setting.Loop_Control = Loop;
+    PID_Clean_I(&motor->Control_Setting.Angle_PID);
+    PID_Clean_I(&motor->Control_Setting.Speed_PID);
 }
 
 /**
