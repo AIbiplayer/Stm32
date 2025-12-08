@@ -12,9 +12,9 @@
 #include "dji_motor.h"
 #include "message_center.h"
 
-CCMRAM INS_t* Gimbal_IMU_Data; ///< 云台IMU数据
-CCMRAM DJI_Motor_Instance* Gimbal_Yaw; ///<Yaw轴电机
-CCMRAM DJI_Motor_Instance* Gimbal_Pitch; ///<Pitch轴电机
+INS_t* Gimbal_IMU_Data; ///< 云台IMU数据
+DJI_Motor_Instance* Gimbal_Yaw; ///<Yaw轴电机
+DJI_Motor_Instance* Gimbal_Pitch; ///<Pitch轴电机
 
 static Publisher_t* gimbal_pub; // 云台应用消息发布者(云台反馈给cmd)
 static Subscriber_t* gimbal_sub; // cmd控制消息订阅者
@@ -33,9 +33,7 @@ void GimbalTask(void const* argument)
     for (;;)
     {
         SubGetMessage(gimbal_sub, &gimbal_cmd_recv);
-
         // Gimbal_Status_Serve();
-
         PubPushMessage(gimbal_pub, &gimbal_feedback_data);
         osDelay(1);
     }
@@ -48,7 +46,7 @@ void GimbalTask(void const* argument)
 static void Gimbal_Init(void)
 {
     //初始化电机模型
-    Motor_Init_s Gimbal = {
+    Motor_Init_s Yaw = {
         .Can_Init_Config = {.can_handle = &hcan1},
         .Control_Setting = {
             .Loop_Control = ANGLE_SPEED_CONTROL,
@@ -63,7 +61,22 @@ static void Gimbal_Init(void)
         .Working_Type = MOTOR_ENABLE
     };
 
-    PID_Param(&Gimbal.Control_Setting.Speed_PID,
+    Motor_Init_s Pitch = {
+        .Can_Init_Config = {.can_handle = &hcan2},
+        .Control_Setting = {
+            .Loop_Control = ANGLE_SPEED_CONTROL,
+            .Angle_Feedback_Source = OTHER_FEEDBACK,
+            .Speed_Feedback_Source = OTHER_FEEDBACK,
+            .Feedforward_Flag = SPEED_FEEDFORWARD,
+            .Other_Angle_Feedback_Ptr = &Gimbal_IMU_Data->Pitch,
+            .Other_Speed_Feedback_Ptr = &Gimbal_IMU_Data->Gyro[0],
+            .Speed_Feedforward_Ptr = &Gimbal_Pitch->Measure.gravity_compensate
+        },
+        .Motor_Type = GM6020,
+        .Working_Type = MOTOR_ENABLE
+    };
+
+    PID_Param(&Yaw.Control_Setting.Speed_PID,
               10.0f,
               0,
               150.0f,
@@ -72,7 +85,25 @@ static void Gimbal_Init(void)
               0,
               1000,
               8000);
-    PID_Param(&Gimbal.Control_Setting.Angle_PID,
+    PID_Param(&Yaw.Control_Setting.Angle_PID,
+              45,
+              0,
+              0,
+              Integral_Limit | Derivative_On_Measurement,
+              1,
+              0,
+              1000,
+              8000);
+    PID_Param(&Pitch.Control_Setting.Speed_PID,
+              10.0f,
+              0,
+              150.0f,
+              Integral_Limit | Derivative_On_Measurement,
+              1,
+              0,
+              1000,
+              8000);
+    PID_Param(&Pitch.Control_Setting.Angle_PID,
               45,
               0,
               0,
@@ -82,9 +113,12 @@ static void Gimbal_Init(void)
               1000,
               8000);
 
-    Gimbal.Can_Init_Config.tx_id = 1;
-    Gimbal.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
-    // Gimbal_Yaw = DJI_Motor_Init(&Gimbal);
+    Yaw.Can_Init_Config.tx_id = 1;
+    Yaw.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
+    // Gimbal_Yaw = DJI_Motor_Init(&Yaw);
+    Pitch.Can_Init_Config.tx_id = 2;
+    Pitch.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
+    // Gimbal_Pitch = DJI_Motor_Init(&Pitch);
 
     gimbal_pub = PubRegister("gimbal_feed", sizeof(Gimbal_Upload_Data_s));
     gimbal_sub = SubRegister("gimbal_cmd", sizeof(Gimbal_Ctrl_Cmd_s));
@@ -95,21 +129,27 @@ static void Gimbal_Init(void)
  */
 static void Gimbal_Status_Serve(void)
 {
+    gimbal_cmd_recv.pitch = Angle_limit(gimbal_cmd_recv.pitch, 30.0f, -19.0f);
     switch (gimbal_cmd_recv.gimbal_mode)
     {
     case GIMBAL_ZERO_FORCE:
         DJI_MotorStop(Gimbal_Yaw);
+        DJI_MotorStop(Gimbal_Pitch);
         // 重置PID积分
         PID_Clean_I(&Gimbal_Yaw->Control_Setting.Angle_PID);
         PID_Clean_I(&Gimbal_Yaw->Control_Setting.Speed_PID);
+        PID_Clean_I(&Gimbal_Pitch->Control_Setting.Angle_PID);
+        PID_Clean_I(&Gimbal_Pitch->Control_Setting.Speed_PID);
         break;
     case GIMBAL_GYRO_MODE:
         DJI_MotorEnable(Gimbal_Yaw);
+        DJI_MotorEnable(Gimbal_Pitch);
         DJI_MotorSetTarget(Gimbal_Yaw, gimbal_cmd_recv.yaw);
+        DJI_MotorSetTarget(Gimbal_Pitch, gimbal_cmd_recv.pitch);
         break;
     default:
         break;
     }
-    // gimbal_feedback_data.gimbal_imu_data = *Gimbal_IMU_Data;
+    gimbal_feedback_data.gimbal_imu_data = *Gimbal_IMU_Data;
     gimbal_feedback_data.yaw_motor_single_round_angle = (uint16_t)Gimbal_Yaw->Measure.Angle;
 }

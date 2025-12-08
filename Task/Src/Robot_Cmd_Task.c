@@ -158,7 +158,7 @@ static void Remote_Control_Cmd_Serve(void)
     if (gimbal_cmd_send.gimbal_mode == GIMBAL_GYRO_MODE)
     {
         gimbal_cmd_send.yaw -= 0.00034f * (float)RC_data[TEMP].rc.rocker_r_;
-        // gimbal_cmd_send.pitch += 0.00078f * (float)RC_data[TEMP].rc.rocker_l1;
+        gimbal_cmd_send.pitch += 0.00078f * (float)RC_data[TEMP].rc.rocker_l1;
         shoot_cmd_send.shoot_rate = shoot_cmd_send.load_mode == LOAD_BURSTFIRE ? 2.0f : 0.0f;
     }
     chassis_cmd_send.vy = (float)RC_data->rc.rocker_l1 * 2;

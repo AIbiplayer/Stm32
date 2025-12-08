@@ -9,6 +9,7 @@
 #include "bsp_dwt.h"
 #include <stdlib.h>
 #include <string.h>
+#include "robot_def.h"
 #include "stdbool.h"
 
 static uint8_t Idx = 0; ///< 电机索引
@@ -17,6 +18,7 @@ static DJI_Motor_Instance* Instance_Group[DJI_MOTOR_CNT]; ///< 把所有电机�
 
 extern DJI_Motor_Instance* Gimbal_Yaw; ///<Yaw轴电机
 extern DJI_Motor_Instance* Load_bullet;
+extern DJI_Motor_Instance* Gimbal_Pitch; ///<Pitch轴电机
 
 /**
  * @brief 由于DJI电机发送以四个一组的形式进行,故对其进行特殊处理,用6个(2can*3group)can_instance专门负责发送
@@ -32,27 +34,27 @@ extern DJI_Motor_Instance* Load_bullet;
 static CANInstance sender_assignment[6] = {
     [0] = {
         .can_handle = &hcan1, .txconf.StdId = 0x1fe, .txconf.IDE = CAN_ID_STD, .txconf.RTR = CAN_RTR_DATA,
-        .txconf.DLC = 0x08, .tx_buff = {0}
+        .txconf.DLC = 0x08, .tx_buff = {0} // GM6020第一组
     },
     [1] = {
         .can_handle = &hcan1, .txconf.StdId = 0x200, .txconf.IDE = CAN_ID_STD, .txconf.RTR = CAN_RTR_DATA,
-        .txconf.DLC = 0x08, .tx_buff = {0}
+        .txconf.DLC = 0x08, .tx_buff = {0} //M3508、M2006第一组
     },
     [2] = {
         .can_handle = &hcan1, .txconf.StdId = 0x1ff, .txconf.IDE = CAN_ID_STD, .txconf.RTR = CAN_RTR_DATA,
-        .txconf.DLC = 0x08, .tx_buff = {0}
+        .txconf.DLC = 0x08, .tx_buff = {0} //M3508、M2006第二组
     },
     [3] = {
         .can_handle = &hcan2, .txconf.StdId = 0x1fe, .txconf.IDE = CAN_ID_STD, .txconf.RTR = CAN_RTR_DATA,
-        .txconf.DLC = 0x08, .tx_buff = {0}
+        .txconf.DLC = 0x08, .tx_buff = {0} //GM6020第一组
     },
     [4] = {
         .can_handle = &hcan2, .txconf.StdId = 0x200, .txconf.IDE = CAN_ID_STD, .txconf.RTR = CAN_RTR_DATA,
-        .txconf.DLC = 0x08, .tx_buff = {0}
+        .txconf.DLC = 0x08, .tx_buff = {0} //M3508、M2006第一组
     },
     [5] = {
         .can_handle = &hcan2, .txconf.StdId = 0x1ff, .txconf.IDE = CAN_ID_STD, .txconf.RTR = CAN_RTR_DATA,
-        .txconf.DLC = 0x08, .tx_buff = {0}
+        .txconf.DLC = 0x08, .tx_buff = {0} //M3508、M2006第二组
     },
 };
 
@@ -94,8 +96,8 @@ static void Motor_Grouping(DJI_Motor_Instance* DJI_Motor, CAN_Init_Config_s* Con
     switch (DJI_Motor->Motor_Type)
     {
     case M2006:
-        Group = 2; // M2006电机由CAN1发送
-        InGroup_ID = Motor_ID - 4;
+        Group = 1; // M2006电机由CAN2发送
+        InGroup_ID = Motor_ID;
         Config->rx_id = 0x200 + Motor_ID + 1;
         Send_Enable_Flag[Group] = true;
         DJI_Motor->Send_Group = Group;
@@ -166,6 +168,13 @@ static void Decode_DJI_Motor(CANInstance* Instance)
         else if (Measure->Ecd - Measure->Last_Ecd < -4096)
             Measure->Total_Round++;
         Measure->Total_Angle = Measure->Total_Round * 360 + (int32_t)(Measure->Angle);
+    }
+
+    if (DJI_Instance == Gimbal_Pitch) //pitch重力补偿
+    {
+        Measure->Total_Angle = (Measure->Ecd - PITCH_HORIZON_ECD) * ECD_ANGLE_COEF_DJI;
+        Measure->gravity_compensate = (Gimbal_Pitch_gravity * cosf(Measure->Total_Angle)) /
+            Torque_Constant_6020;
     }
 }
 
@@ -273,4 +282,11 @@ void DJI_MotorChangeReverse(DJI_Motor_Instance* motor, const Motor_Reverse_Flag_
 void DJI_MotorSetTarget(DJI_Motor_Instance* motor, const float Target_)
 {
     motor->Control_Setting.Target = Target_;
+}
+
+float Angle_limit(float angle, float max, float min)
+{
+    angle = angle > max ? max : angle;
+    angle = angle < min ? min : angle;
+    return angle;
 }

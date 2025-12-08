@@ -38,7 +38,7 @@ void ChassisTask(void* argument)
 
         Speed_Calculate();
         Chassis_Status_Serve();
-        Chassis_Output();
+        // Chassis_Output();
 
         PubPushMessage(chassis_pub, &chassis_feedback_data);
 
@@ -77,31 +77,22 @@ static void Chassis_Init(void)
               100,
               1000,
               8000);
-    PID_Param(&Mec_Chassis.Control_Setting.Angle_PID,
-              0.0f,
-              0.0f,
-              0,
-              Integral_Limit | Derivative_On_Measurement,
-              1,
-              0,
-              1000,
-              8000);
 
     Mec_Chassis.Can_Init_Config.tx_id = 1;
     Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
-    Omni_Wheel[0] = DJI_Motor_Init(&Mec_Chassis);
+    // Omni_Wheel[0] = DJI_Motor_Init(&Mec_Chassis);
 
     Mec_Chassis.Can_Init_Config.tx_id = 2;
     Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
-    Omni_Wheel[1] = DJI_Motor_Init(&Mec_Chassis);
+    // Omni_Wheel[1] = DJI_Motor_Init(&Mec_Chassis);
 
     Mec_Chassis.Can_Init_Config.tx_id = 3;
     Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_REVERSE;
-    Omni_Wheel[2] = DJI_Motor_Init(&Mec_Chassis);
+    // Omni_Wheel[2] = DJI_Motor_Init(&Mec_Chassis);
 
     Mec_Chassis.Can_Init_Config.tx_id = 4;
     Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_REVERSE;
-    Omni_Wheel[3] = DJI_Motor_Init(&Mec_Chassis);
+    // Omni_Wheel[3] = DJI_Motor_Init(&Mec_Chassis);
 
     chassis_sub = SubRegister("chassis_cmd", sizeof(Chassis_Ctrl_Cmd_s));
     chassis_pub = PubRegister("chassis_feed", sizeof(Chassis_Upload_Data_s));

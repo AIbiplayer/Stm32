@@ -22,7 +22,7 @@
 #define PITCH_MAX_ANGLE 20.90f           // 云台竖直方向最大角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
 #define PITCH_MIN_ANGLE -23.00f           // 云台竖直方向最小角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
 // 发射参数
-#define ONE_BULLET_DELTA_ANGLE  51.42857143f   // 发射一发弹丸拨盘转动的距离,由机械设计图纸给出
+#define ONE_BULLET_DELTA_ANGLE  40.00f   // 发射一发弹丸拨盘转动的距离,由机械设计图纸给出
 #define REDUCTION_RATIO_LOADER 36.0f // 拨盘电机的减速比,2006减速比36：1
 #define NUM_PER_CIRCLE 7            // 拨盘一圈的装载量
 // 机器人底盘修改的参数,单位为mm(毫米)

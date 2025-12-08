@@ -93,7 +93,7 @@ static void Shoot_Init(void)
               1000,
               8000);
     PID_Param(&Friction.Control_Setting.Speed_PID,
-              15,
+              11,
               0,
               0,
               Integral_Limit | Derivative_On_Measurement,
@@ -102,16 +102,15 @@ static void Shoot_Init(void)
               1000,
               8000);
 
-
-    Load.Can_Init_Config.tx_id = 7;
+    Load.Can_Init_Config.tx_id = 1;
     Load.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Load_bullet = DJI_Motor_Init(&Load);
 
-    Friction.Can_Init_Config.tx_id = 5;
+    Friction.Can_Init_Config.tx_id = 2;
     Friction.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Friction_L = DJI_Motor_Init(&Friction);
 
-    Friction.Can_Init_Config.tx_id = 6;
+    Friction.Can_Init_Config.tx_id = 3;
     Friction.Control_Setting.Reverse_Flag = MOTOR_REVERSE;
     Friction_R = DJI_Motor_Init(&Friction);
 
@@ -137,8 +136,8 @@ static void Shoot_Status_Serve(void)
     switch (shoot_cmd_recv.friction_mode)
     {
     case FRICTION_ON:
-        DJI_MotorSetTarget(Friction_L, 2500);
-        DJI_MotorSetTarget(Friction_R, 2500);
+        DJI_MotorSetTarget(Friction_L, 7000);
+        DJI_MotorSetTarget(Friction_R, 7000);
         break;
     case FRICTION_OFF:
         DJI_MotorSetTarget(Friction_L, 0);

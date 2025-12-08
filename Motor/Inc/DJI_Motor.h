@@ -17,12 +17,17 @@
 #define SPEED_SMOOTH_COEF 0.85f      // 最好大于0.85
 #define CURRENT_SMOOTH_COEF 0.9f     // 必须大于0.9
 
+#define Gimbal_Pitch_gravity -450  //重力补偿的重心位置
+#define Torque_Constant_6020  0.741  //6020转力矩转换为电流的系数
+#define Inertia_Moment_6020   133  //6020转动惯量kg.cm2
+
 typedef struct
 {
     uint16_t Last_Ecd; ///< 上一次角度值，范围0~8192
     uint16_t Ecd; ///< 角度值，范围0~8192
     int16_t Speed; ///< 速度，单位rpm
     float Angle; ///< 角度，范围0~360
+    float gravity_compensate; //重力补偿
     float Current; ///< 电流值
     uint8_t Temp; ///< 温度
 
@@ -61,6 +66,7 @@ void DJI_MotorEnable(DJI_Motor_Instance* motor);
 void DJI_MotorChangeLoop(DJI_Motor_Instance* motor, Motor_Loop_Control_Type_e Loop);
 void DJI_MotorChangeReverse(DJI_Motor_Instance* motor, Motor_Reverse_Flag_e motor_reverse_flag);
 void DJI_Motor_Control(void);
+float Angle_limit(float angle, float max, float min);
 void DJI_MotorStop(DJI_Motor_Instance* motor);
 
 #endif //DJI_MOTOR_H
