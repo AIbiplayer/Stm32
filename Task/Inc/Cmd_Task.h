@@ -21,13 +21,14 @@ typedef enum
 // 视觉模式
 typedef enum
 {
-    NONE_VISION=0, // 无模式
+    NONE_VISION = 0, // 无模式
     TRAIL_VISION, // 寻迹模式
     FACE_VISION, // 人脸识别模式
     LASER_VISION // 激光打靶模式
-}Vision_Mode_e;
+} Vision_Mode_e;
 
 void Cmd_Task(void);
+void OLED_SHOW(void);
 void Key_Setting(void);
 
 #endif //CMD_TASK_H

@@ -12,12 +12,15 @@
 #include "usart.h"
 #include "ax_ps2.h"
 #include "MG310.h"
+#include "OLED.h"
+#include "Mpu6050.h"
 #include "stdlib.h"
 #include "string.h"
 #include "Bluetooth.h"
 
 extern char Bluetooth_Receive_Buffer[2][RX_BUFF_SIZE];
 extern char* Buffer_Ptr;
+extern double pitch_, yaw, roll_; // 角度滤波后数据
 extern Motor_Instance_s MG310[4];
 extern Chassis_Instance_s CH_Instance;
 extern JOYSTICK_TypeDef JoystickStruct;
@@ -28,18 +31,20 @@ static bool Toggle = false; // 切换双缓冲区标志
 /**
  * @brief 底盘控制任务
  */
-CCMRAM_CODE void Cmd_Task(void)
+void Cmd_Task(void)
 {
-    AX_Delayms(30);
+    KalmanFilter();
     AX_PS2_ScanKey();
     Key_Setting();
+    OLED_SHOW();
+    AX_Delayms(30);
 }
 
 /**
  * @brief 清除实例部分数据
  * @note 保证模式切换时底盘的稳定
  */
-CCMRAM_CODE void Clear_AllInstance(void)
+void Clear_AllInstance(void)
 {
     BUZZ_OFF();
 
@@ -82,13 +87,13 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t Size) // 串
  * @todo 扩展视觉和云台模块
  * @note 重力感应部分没有使用Yaw角速度控制底盘
  */
-CCMRAM_CODE void Key_Setting(void)
+void Key_Setting(void)
 {
-    CH_Instance.Control_Mode = JoystickStruct.select_mode ? BLUETOOTH_MODE : PS2_MODE;
+    CH_Instance.Control_Mode = JoystickStruct.select_mode ? PS2_MODE : BLUETOOTH_MODE;
 
     if (JoystickStruct.select_mode != JoystickStruct.select_mode_last)
     {
-        JoystickStruct.select_mode && !JoystickStruct.select_last ? Bluetooth_Start() : Bluetooth_Stop();
+        !JoystickStruct.select_mode ? Bluetooth_Start() : Bluetooth_Stop();
         Clear_AllInstance();
     }
 
@@ -173,4 +178,58 @@ CCMRAM_CODE void Key_Setting(void)
         */
         break;
     }
+}
+
+/**
+ * @brief OLED显示任务
+ */
+void OLED_SHOW(void)
+{
+    OLED_ShowString(1, 1, "Mode:");
+    switch (CH_Instance.Status)
+    {
+    case CHASSIS_MEC:
+        OLED_ShowString(1, 7, "Mec     ");
+        break;
+    case CHASSIS_OMNI_TRI:
+        OLED_ShowString(1, 7, "Omni_Tri");
+        break;
+    case CHASSIS_OMNI_SQU:
+        OLED_ShowString(1, 7, "Omni_Squ");
+        break;
+    }
+
+    OLED_ShowString(2, 1, "Control:");
+    switch (CH_Instance.Control_Mode)
+    {
+    case PS2_MODE:
+        OLED_ShowString(2, 10, "PS2");
+        break;
+    case BLUETOOTH_MODE:
+        OLED_ShowString(2, 10, "Ble");
+        break;
+    }
+
+    OLED_ShowString(3, 1, "Vision:");
+    switch (CH_Instance.Vision_Mode)
+    {
+    case NONE_VISION:
+        OLED_ShowString(3, 9, "None ");
+        break;
+    case TRAIL_VISION:
+        OLED_ShowString(3, 9, "Trail");
+        break;
+    case FACE_VISION:
+        OLED_ShowString(3, 9, "Face ");
+        break;
+    case LASER_VISION:
+        OLED_ShowString(3, 9, "Laser");
+        break;
+    }
+    OLED_ShowString(4, 1, "Y:");
+    OLED_ShowSignedNum(4, 3, yaw, 2);
+    OLED_ShowString(4, 6, "P:");
+    OLED_ShowSignedNum(4, 8, pitch_, 2);
+    OLED_ShowString(4, 12, "R:");
+    OLED_ShowSignedNum(4, 14, roll_, 2);
 }

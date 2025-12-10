@@ -44,7 +44,7 @@
 #include "ax_sys.h"
 #include "Debug_Tool.h"
 
-CCMRAM_DATA JOYSTICK_TypeDef JoystickStruct = {0};
+JOYSTICK_TypeDef JoystickStruct = {0};
 
 const uint8_t PS2_cmnd[9] = {0x01, 0x42, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; //请求获取数据命令
 static uint8_t PS2_data[9] = {0}; //接收的数据

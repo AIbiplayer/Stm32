@@ -8,11 +8,10 @@
 #include "main.h"
 #include "math.h"
 #include "MG310.h"
-#include "string.h"
 #include "Debug_Tool.h"
 
 CCMRAM_DATA Chassis_Instance_s CH_Instance = {
-    CHASSIS_MEC, PS2_MODE, NONE_VISION,
+    CHASSIS_MEC, BLUETOOTH_MODE, NONE_VISION,
     {0, 0, 0}, {0, 0, 0, 0}
 };
 
@@ -49,15 +48,15 @@ CCMRAM_CODE void Chassis_Behavior(void)
         CH_Instance.Speed_Set[0] = -CH_Instance.Move.x
             - CH_Instance.Move.y
             + CH_Instance.Move.w;
-        CH_Instance.Speed_Set[1] = CH_Instance.Move.x
-            - CH_Instance.Move.y
+        CH_Instance.Speed_Set[1] = -CH_Instance.Move.x
+            + CH_Instance.Move.y
             + CH_Instance.Move.w;
         CH_Instance.Speed_Set[2] = -CH_Instance.Move.x
+            - CH_Instance.Move.y
+            - CH_Instance.Move.w;
+        CH_Instance.Speed_Set[3] = -CH_Instance.Move.x
             + CH_Instance.Move.y
-            + CH_Instance.Move.w;
-        CH_Instance.Speed_Set[3] = CH_Instance.Move.x
-            + CH_Instance.Move.y
-            + CH_Instance.Move.w;
+            - CH_Instance.Move.w;
         break;
     case CHASSIS_OMNI_SQU: // 四轮全向轮模式
         CH_Instance.Speed_Set[0] = CH_Instance.Move.x + CH_Instance.Move.y + CH_Instance.Move.w;
@@ -81,7 +80,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
         for (uint8_t i = 0; i < 4; i++)
         {
             MG310[i].Speed = MG310[i].Motor_GetSpeed(MG310[i].TIMx);
-            MG310[i].PID_Output = PID_Calculate(&MG310[i].PID, MG310[i].Speed, CH_Instance.Speed_Set[i]);
+            MG310[i].PID_Output = PID_Calculate(&MG310[i].PID, CH_Instance.Speed_Set[i], MG310[i].Speed);
         }
     }
 }

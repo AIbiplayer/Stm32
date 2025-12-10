@@ -29,9 +29,13 @@
 
 #include "Bluetooth.h"
 #include "Debug_Tool.h"
+#include "Chassis_Task.h"
 #include "ax_delay.h"
 #include "ax_ps2.h"
 #include "Cmd_Task.h"
+#include "MG310.h"
+#include "Mpu6050.h"
+#include "OLED.h"
 
 /* USER CODE END Includes */
 
@@ -111,8 +115,11 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
-    Bluetooth_Start();
+    MG310_Init();
     AX_DELAY_Init();
+    MPU6050_Init();
+    OLED_Init();
+    Bluetooth_Start();
 
   /* USER CODE END 2 */
 
@@ -121,7 +128,7 @@ int main(void)
     while (1)
     {
         Cmd_Task();
-        Debug_Chassis();
+        Chassis_Task();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

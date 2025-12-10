@@ -16,17 +16,23 @@
 #define ENCODERD_TIM htim3
 #define GAP_TIM     htim14//电机速度计算定时器,1ms
 
+typedef enum
+{
+    MOTOR_NORMAL = 0,
+    MOTOR_REVERSE
+} Reverse_e;
+
 typedef struct
 {
-    int16_t Speed; //目标速度
+    float Speed; //目标速度
     PID_Typedef PID; //电机速度PID结构体
     float PID_Output; //PID输出
     TIM_HandleTypeDef* TIMx; //电机对应的定时器
-    int16_t (*Motor_GetSpeed)(TIM_HandleTypeDef*); //电机速度
+    float (*Motor_GetSpeed)(TIM_HandleTypeDef*); //电机速度
 } Motor_Instance_s;
 
 void MG310_Init(void);
 void MG310_Drive(void);
-int16_t GetSpeed(TIM_HandleTypeDef* htim);
+float GetSpeed(TIM_HandleTypeDef* htim);
 
 #endif //MG310_H

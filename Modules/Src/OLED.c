@@ -5,6 +5,7 @@
  */
 
 #include "main.h"
+#include "ax_delay.h"
 #include "OLED_Font.h"
 
 /*引脚配置*/
@@ -12,14 +13,26 @@
 #define OLED_W_SDA(x)		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, (GPIO_PinState)(x))
 
 /**
+ * @brief 简单延时函数
+ */
+void Delay(void)
+{
+    for (uint8_t i = 0; i < 5; i++);
+}
+
+/**
  * @brief  OLED启动程序
  */
 void OLED_I2C_Start(void)
 {
     OLED_W_SDA(1);
+    Delay();
     OLED_W_SCL(1);
+    Delay();
     OLED_W_SDA(0);
+    Delay();
     OLED_W_SCL(0);
+    Delay();
 }
 
 /**
@@ -28,8 +41,11 @@ void OLED_I2C_Start(void)
 void OLED_I2C_Stop(void)
 {
     OLED_W_SDA(0);
+    Delay();
     OLED_W_SCL(1);
+    Delay();
     OLED_W_SDA(1);
+    Delay();
 }
 
 /**
@@ -42,11 +58,16 @@ void OLED_I2C_SendByte(uint8_t Byte)
     for (i = 0; i < 8; i++)
     {
         OLED_W_SDA(!!(Byte & (0x80 >> i)));
+        Delay();
         OLED_W_SCL(1);
+        Delay();
         OLED_W_SCL(0);
+        Delay();
     }
     OLED_W_SCL(1); //额外的一个时钟，不处理应答信号
+    Delay();
     OLED_W_SCL(0);
+    Delay();
 }
 
 /**
