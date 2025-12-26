@@ -24,14 +24,15 @@
 // 发射参数
 #define ONE_BULLET_DELTA_ANGLE  40.00f   // 发射一发弹丸拨盘转动的距离,由机械设计图纸给出
 #define REDUCTION_RATIO_LOADER 36.0f // 拨盘电机的减速比,2006减速比36：1
-#define NUM_PER_CIRCLE 7            // 拨盘一圈的装载量
+#define NUM_PER_CIRCLE 9            // 拨盘一圈的装载量
 // 机器人底盘修改的参数,单位为mm(毫米)
-#define WHEEL_BASE 500              // 纵向轴距(前进后退方向)
-#define TRACK_WIDTH 500             // 横向轮距(左右平移方向)
+#define WHEEL_BASE 311              // 纵向轴距(前进后退方向)
+#define TRACK_WIDTH 297             // 横向轮距(左右平移方向)
 #define CENTER_GIMBAL_OFFSET_X 0    // 云台旋转中心距底盘几何中心的距离,前后方向,云台位于正中心时默认设为0
 #define CENTER_GIMBAL_OFFSET_Y 0    // 云台旋转中心距底盘几何中心的距离,左右方向,云台位于正中心时默认设为0
-#define RADIUS_WHEEL 75             // 轮子半径
-#define REDUCTION_RATIO_WHEEL 19.0f // 电机减速比,因为编码器量测的是转子的速度而不是输出轴的速度故需进行转换
+#define RADIUS_WHEEL 153             // 轮子半径
+#define REDUCTION_RATIO_WHEEL 19.0f // 3508电机减速比,因为编码器量测的是转子的速度而不是输出轴的速度故需进行转换，这也是M3519减速比
+#define REDUCTION_TRACK 2.9f     // 履带减速比
 
 #define GYRO2GIMBAL_DIR_YAW 1   // 陀螺仪数据相较于云台的yaw的方向,1为相同,-1为相反
 #define GYRO2GIMBAL_DIR_PITCH -1 // 陀螺仪数据相较于云台的pitch的方向,1为相同,-1为相反
@@ -130,6 +131,10 @@ typedef struct
     float set_angle; //由遥控器编码器算得的舵向角度
     uint16_t set_ecd; //由反正切得到的目标编码值
     float angle_offset_c; //云台与底盘的角度差,底盘用
+
+    Track_Mode_e track; // 履带模式
+    float a_track_head; // 履带前轮
+    float a_track_back; // 履带后轮
 } Chassis_Ctrl_Cmd_s;
 
 // cmd发布的云台控制数据,由gimbal订阅

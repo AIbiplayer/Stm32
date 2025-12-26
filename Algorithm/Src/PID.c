@@ -54,9 +54,12 @@ float PID_Calculate(PID_Typedef* PID_, float Target_, float Actual_)
     PID_->Target = Target_;
     PID_->Actual = Actual_;
     PID_->Error = Target_ - Actual_;
-
+    // 死区处理
+    if (fabsf(PID_->Error) < PID_->Dead_Zone)
+        return 0.0f;
+    // 积分计算
     PID_->Error_Sum += PID_->Improve & Trapezoid_Intergral ? (PID_->Error + PID_->Last_Error) / 2 : PID_->Error;
-
+    // 积分限幅
     if (PID_->Improve & Integral_Limit)
     {
         PID_->Error_Sum = fabsf(PID_->Error_Sum) > PID_->I_Limit
@@ -65,12 +68,11 @@ float PID_Calculate(PID_Typedef* PID_, float Target_, float Actual_)
                                     : -(PID_->I_Limit)
                               : PID_->Error_Sum;
     }
-
+    // PID计算
     PID_->POut = PID_->Kp * PID_->Error;
     PID_->IOut = PID_->Ki * PID_->Error_Sum;
     PID_->Dout = PID_->Kd * (PID_->Error - PID_->Last_Error);
-
-
+    // 微分先行
     if (PID_->Improve & Derivative_On_Measurement)
     {
         PID_->Dout = PID_->Kd * (PID_->Last_Actual - PID_->Actual);
@@ -79,12 +81,8 @@ float PID_Calculate(PID_Typedef* PID_, float Target_, float Actual_)
     {
         PID_->Dout = PID_->DOut_Filter * PID_->Dout + (1 - PID_->DOut_Filter) * PID_->Last_DOut;
     }
-    if (PID_->Improve & ChangingIntegralRate && fabsf(Actual_) <= fabsf(PID_->Dead_Zone))
-    {
-        PID_->IOut = 0.0f;
-    }
     PID_->Output = PID_->POut + PID_->IOut + PID_->Dout;
-
+    // 输出限幅
     PID_->Output = fabsf(PID_->Output) > PID_->Max_Output
                        ? (int32_t)PID_->Output > 0
                              ? PID_->Max_Output

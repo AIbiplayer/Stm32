@@ -16,6 +16,8 @@ static uint8_t Idx = 0; ///< 电机索引
 static bool Send_Enable_Flag[6]; ///< 六组电机发送标志位，哪一个为True说明哪一个可以发送
 static DJI_Motor_Instance* Instance_Group[DJI_MOTOR_CNT]; ///< 把所有电机实例放到一个组，之后统一进行PID计算，注意这里是指针类型
 
+static float STarget = 0.0f;
+
 extern DJI_Motor_Instance* Gimbal_Yaw; ///<Yaw轴电机
 extern DJI_Motor_Instance* Load_bullet;
 extern DJI_Motor_Instance* Gimbal_Pitch; ///<Pitch轴电机
@@ -143,7 +145,6 @@ static void Motor_Grouping(DJI_Motor_Instance* DJI_Motor, CAN_Init_Config_s* Con
 
 /**
  * @brief 大疆电机解析数据
- * @todo 添加Pitch重力补偿
  */
 static void Decode_DJI_Motor(CANInstance* Instance)
 {
@@ -210,6 +211,7 @@ void DJI_Motor_Control(void)
         switch (Control_Setting.Loop_Control) // 按闭环控制类型进行控制
         {
         case SPEED_CONTROL:
+            STarget = PID_Ref;
             PID_Ref = PID_Calculate(&Control_Setting.Speed_PID, PID_Ref, PID_Measure_Speed);
             break;
         case ANGLE_CONTROL:
@@ -284,6 +286,9 @@ void DJI_MotorSetTarget(DJI_Motor_Instance* motor, const float Target_)
     motor->Control_Setting.Target = Target_;
 }
 
+/**
+ * @brief 角度限制
+ */
 float Angle_limit(float angle, float max, float min)
 {
     angle = angle > max ? max : angle;

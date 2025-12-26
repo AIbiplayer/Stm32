@@ -67,18 +67,7 @@ CANInstance* CANRegister(CAN_Init_Config_s* config)
     {
         CANServiceInit(); // 第一次注册,先进行硬件初始化
     }
-    if (idx >= CAN_MX_REGISTER_CNT) // 超过最大实例数
-    {
-    }
-    for (size_t i = 0; i < idx; i++)
-    {
-        // 重复注册 | id重复
-        if (can_instance[i]->rx_id == config->rx_id && can_instance[i]->can_handle == config->can_handle)
-        {
-        }
-    }
-
-    CANInstance* instance = (CANInstance*)malloc(sizeof(CANInstance)); // 分配空间
+    CANInstance* instance = malloc(sizeof(CANInstance)); // 分配空间
     memset(instance, 0, sizeof(CANInstance)); // 分配的空间未必是0,所以要先清空
     // 进行发送报文的配置
     instance->txconf.StdId = config->tx_id; // 发送id
@@ -103,7 +92,6 @@ CANInstance* CANRegister(CAN_Init_Config_s* config)
 uint8_t CANTransmit(CANInstance* _instance, float timeout)
 {
     static uint32_t busy_count;
-    static volatile float wait_time __attribute__((unused)); // for cancel warning
     float dwt_start = DWT_GetTimeline_ms();
     while (HAL_CAN_GetTxMailboxesFreeLevel(_instance->can_handle) == 0) // 等待邮箱空闲
     {
@@ -113,7 +101,6 @@ uint8_t CANTransmit(CANInstance* _instance, float timeout)
             return 0;
         }
     }
-    wait_time = DWT_GetTimeline_ms() - dwt_start;
     // tx_mailbox会保存实际填入了这一帧消息的邮箱,但是知道是哪个邮箱发的似乎也没啥用
     if (HAL_CAN_AddTxMessage(_instance->can_handle, &_instance->txconf, _instance->tx_buff, &_instance->tx_mailbox))
     {

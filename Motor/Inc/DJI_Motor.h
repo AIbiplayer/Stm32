@@ -55,9 +55,6 @@ typedef struct
 
     uint8_t Send_Group;
     uint8_t Message_Num;
-
-    uint32_t Feed_Cnt; ///< 喂狗值，检测电机是否离线
-    float dt; ///< 电机数据更新周期
 } DJI_Motor_Instance; ///< 大疆电机实例
 
 DJI_Motor_Instance* DJI_Motor_Init(Motor_Init_s* Motor_Init);

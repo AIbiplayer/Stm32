@@ -17,7 +17,6 @@ typedef enum
     Derivative_On_Measurement = 0x02, //微分先行
     Trapezoid_Intergral = 0x04, //梯形积分
     OutputFilter = 0x10, //输出滤波
-    ChangingIntegralRate = 0x20, //变积分
 } Improvement;
 
 typedef struct

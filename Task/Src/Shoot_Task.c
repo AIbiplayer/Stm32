@@ -30,11 +30,13 @@ static uint8_t Shoot_Relieve_Flag = 0;
  */
 void ShootTask(void const* argument)
 {
+    taskENTER_CRITICAL();
     Shoot_Init();
+    taskEXIT_CRITICAL();
     for (;;)
     {
         SubGetMessage(shoot_sub, &shoot_cmd_recv);
-        Shoot_Status_Serve();
+        // Shoot_Status_Serve();
         PubPushMessage(shoot_pub, &shoot_feedback_data);
         osDelay(1);
     }
@@ -104,15 +106,15 @@ static void Shoot_Init(void)
 
     Load.Can_Init_Config.tx_id = 1;
     Load.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
-    Load_bullet = DJI_Motor_Init(&Load);
+    // Load_bullet = DJI_Motor_Init(&Load);
 
     Friction.Can_Init_Config.tx_id = 2;
     Friction.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
-    Friction_L = DJI_Motor_Init(&Friction);
+    // Friction_L = DJI_Motor_Init(&Friction);
 
     Friction.Can_Init_Config.tx_id = 3;
     Friction.Control_Setting.Reverse_Flag = MOTOR_REVERSE;
-    Friction_R = DJI_Motor_Init(&Friction);
+    // Friction_R = DJI_Motor_Init(&Friction);
 
     shoot_sub = SubRegister("shoot_cmd", sizeof(Shoot_Ctrl_Cmd_s));
 }

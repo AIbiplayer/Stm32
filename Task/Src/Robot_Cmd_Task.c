@@ -8,16 +8,16 @@
 #include "bsp_dwt.h"
 #include "main.h"
 #include "bsp_usart.h"
+#include "DM_Motor.h"
 #include "cmsis_os.h"
 #include "remote_control.h"
 #include "message_center.h"
 #include "robot_def.h"
 
-CCMRAM RC_ctrl_t* RC_data; // 遥控器数据,初始化时返回
+RC_ctrl_t* RC_data; // 遥控器数据,初始化时返回
 
-extern osSemaphoreId RC_Parse_FlagHandle;
-extern USARTInstance* rc_usart_instance;
 extern INS_t* Gimbal_IMU_Data; ///< 云台IMU数据
+extern float HC_Measure;
 
 /* cmd应用包含的模块实例指针和交互信息存储*/
 static Publisher_t* chassis_cmd_pub; // 底盘控制消息发布者
@@ -40,6 +40,8 @@ static void Emergency_Stop(void);
 static void CalcOffsetAngle(void);
 static void Remote_Control_Cmd_Serve(void);
 
+static PID_Typedef UPPID;
+
 /**
  * @brief 命令读取与发送FreeRTOS任务
  * @note DJI电机控制函数在此调用
@@ -50,7 +52,7 @@ void CmdTask(void* argument)
     Robot_Cmd_Init();
 
     taskENTER_CRITICAL();
-    // Gimbal_IMU_Data = INS_Init();
+    Gimbal_IMU_Data = INS_Init();
     taskEXIT_CRITICAL();
     HAL_GPIO_WritePin(LED_B_GPIO_Port,LED_B_Pin, GPIO_PIN_SET);
 
@@ -63,6 +65,7 @@ void CmdTask(void* argument)
         CalcOffsetAngle();
         Remote_Control_Cmd_Serve();
         DJI_Motor_Control();
+        DM_Motor_Control();
 
         PubPushMessage(shoot_cmd_pub, (void*)&shoot_cmd_send);
         PubPushMessage(chassis_cmd_pub, (void*)&chassis_cmd_send);
@@ -78,6 +81,11 @@ void CmdTask(void* argument)
 static void Robot_Cmd_Init(void)
 {
     RC_data = RemoteControlInit(&huart3);
+
+    // 上台阶履带PID参数
+    PID_Param(&UPPID, -6.0f, -3.0f, 0.0f,
+              Integral_Limit | Derivative_On_Measurement,
+              1.0f, 10, 10, 90);
 
     chassis_cmd_pub = PubRegister("chassis_cmd", sizeof(Chassis_Ctrl_Cmd_s));
     chassis_feed_sub = SubRegister("chassis_feed", sizeof(Chassis_Upload_Data_s));
@@ -122,6 +130,8 @@ static void Remote_Control_Cmd_Serve(void)
         Emergency_Stop();
         return;
     }
+    // 射击指令
+    chassis_cmd_send.chassis_last_mode = chassis_cmd_send.chassis_mode;
     shoot_cmd_send.shoot_mode = SHOOT_ON;
     HAL_GPIO_WritePin(LED_R_GPIO_Port,LED_R_Pin, GPIO_PIN_RESET);
 
@@ -135,36 +145,70 @@ static void Remote_Control_Cmd_Serve(void)
     else
         shoot_cmd_send.load_mode = LOAD_STOP; //停止
 
+    static uint8_t up_count, down_count, flag = 0;
     //两杆为中间，小陀螺模式
     if (switch_is_mid(RC_data[TEMP].rc.switch_left) && switch_is_mid(RC_data[TEMP].rc.switch_right))
     {
-        chassis_cmd_send.chassis_mode = CHASSIS_ROTATE;
-        chassis_cmd_send.chassis_last_mode = CHASSIS_ROTATE;
+        chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
         gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
+        chassis_cmd_send.track = TRACK_ROTATE;
+        flag = 0;
     }
-    // 左杆在中，右杆在上，随云台转动
+    // 左杆在中，右杆在上，上台阶模式
     else if (switch_is_mid(RC_data[TEMP].rc.switch_left) && switch_is_up(RC_data[TEMP].rc.switch_right))
     {
         chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
-        chassis_cmd_send.chassis_last_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
+        chassis_cmd_send.track = TRACK_UP;
         gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
     }
+    // 左杆在中，右杆在下，底盘自由控制，履带为升高模式
     else if (switch_is_mid(RC_data[TEMP].rc.switch_left) && switch_is_down(RC_data[TEMP].rc.switch_right))
     {
-        chassis_cmd_send.chassis_mode = CHASSIS_NO_FOLLOW;
-        chassis_cmd_send.chassis_last_mode = CHASSIS_NO_FOLLOW;
+        chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
         gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
+        chassis_cmd_send.track = TRACK_EXTEND;
+        flag = 0;
+    }
+
+    if (flag == 2)
+        chassis_cmd_send.track = TRACK_NONE;
+    // @todo 履带控制指令，由于遥控器中云台和履带共用右拨杆，目前只能使用一个
+    switch (chassis_cmd_send.track)
+    {
+    case TRACK_UP:
+        // up_count = HC_Measure > 20.0f && flag == 0 ? up_count + 1 : 0;
+        // down_count = HC_Measure < 10.0f && flag == 1 ? down_count + 1 : 0;
+        // flag = up_count > 20 ? 1 : flag;
+        // flag = down_count > 20 ? 2 : flag;
+
+        chassis_cmd_send.a_track_head += (float)RC_data[TEMP].rc.rocker_r1 * 0.00034f;
+        chassis_cmd_send.a_track_head = Angle_limit(chassis_cmd_send.a_track_head, 180.0f, 0.0f);
+        chassis_cmd_send.a_track_back = 105 + PID_Calculate(&UPPID, 0.0f, gimbal_fetch_data.gimbal_imu_data.Roll);
+        chassis_cmd_send.a_track_back = Angle_limit(chassis_cmd_send.a_track_back, 180.0f, 105.0f);
+        break;
+    case TRACK_EXTEND:
+        chassis_cmd_send.a_track_head = 0.0f;
+        chassis_cmd_send.a_track_back = 0.0f;
+        break;
+    case TRACK_ROTATE:
+        chassis_cmd_send.a_track_head = 0.0f;
+        chassis_cmd_send.a_track_back = 0.0f;
+        // @todo 小陀螺先不写
+        break;
+    case TRACK_NONE:
+        chassis_cmd_send.a_track_head = 0.0f;
+        chassis_cmd_send.a_track_back = 0.0f;
+        break;
     }
     if (gimbal_cmd_send.gimbal_mode == GIMBAL_GYRO_MODE)
     {
         gimbal_cmd_send.yaw -= 0.00034f * (float)RC_data[TEMP].rc.rocker_r_;
-        gimbal_cmd_send.pitch += 0.00078f * (float)RC_data[TEMP].rc.rocker_l1;
-        shoot_cmd_send.shoot_rate = shoot_cmd_send.load_mode == LOAD_BURSTFIRE ? 2.0f : 0.0f;
+        gimbal_cmd_send.pitch += 0.0009f * (float)RC_data[TEMP].rc.rocker_r1;
     }
-    chassis_cmd_send.vy = (float)RC_data->rc.rocker_l1 * 2;
+    chassis_cmd_send.vy = (float)RC_data[TEMP].rc.rocker_l1 / 0.151f * 3.0f; // 最高3m/s
     chassis_cmd_send.chassis_mode == CHASSIS_INDEPENDENCE
-        ? (chassis_cmd_send.wz = 0.3f * (float)RC_data[TEMP].rc.rocker_l_)
-        : (chassis_cmd_send.vx = (float)RC_data[TEMP].rc.rocker_l_ * 2);
+        ? (chassis_cmd_send.wz = (float)RC_data[TEMP].rc.rocker_l_ / 0.151f)
+        : (chassis_cmd_send.vx = -(float)RC_data[TEMP].rc.rocker_l_ / 0.151f * 3.0f);
 }
 
 /**
@@ -173,6 +217,7 @@ static void Remote_Control_Cmd_Serve(void)
 static void Emergency_Stop(void)
 {
     chassis_cmd_send.chassis_mode = CHASSIS_ZERO_FORCE;
+    chassis_cmd_send.track = TRACK_NONE;
     gimbal_cmd_send.gimbal_mode = GIMBAL_ZERO_FORCE;
     shoot_cmd_send.shoot_mode = SHOOT_OFF;
     shoot_cmd_send.friction_mode = FRICTION_OFF;

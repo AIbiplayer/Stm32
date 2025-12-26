@@ -12,7 +12,6 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
-
 # Define the build type
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug")
@@ -32,15 +31,7 @@ message("Build type: " ${CMAKE_BUILD_TYPE})
 enable_language(C ASM)
 
 # Create an executable object type
-add_executable(${CMAKE_PROJECT_NAME}
-        Task/Src/Chassis_Task.c
-        Task/Src/Robot_Cmd_Task.c
-        Task/Src/Vofa_Debug.c
-        Task/Inc/Vofa_Debug.h
-        Task/Src/Gimbal_Task.c
-        Algorithm/Src/Sliding.c
-        Algorithm/Inc/Sliding.h
-        Task/Src/Ins_Task.c)
+add_executable(${CMAKE_PROJECT_NAME})
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
@@ -55,6 +46,7 @@ file(GLOB_RECURSE ALGORITHM_SOURCE "Algorithm/Src/*c")
 file(GLOB_RECURSE MOTOR_SOURCE "Motor/Src/*c")
 file(GLOB_RECURSE MODULES_SOURCE "Modules/Src/*c")
 file(GLOB_RECURSE TASK_SOURCE "Task/Src/*c")
+file(GLOB_RECURSE VL53L0X_SOURCE "Modules/VL530X/Src/*c")
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
@@ -64,6 +56,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
         ${MOTOR_SOURCE}
         ${MODULES_SOURCE}
         ${TASK_SOURCE}
+        ${VL53L0X_SOURCE}
 )
 
 # Add include paths
@@ -73,6 +66,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
         Algorithm/Inc
         Motor/Inc
         Modules/Inc
+        Modules/VL530X/Inc
         Task/Inc
 )
 

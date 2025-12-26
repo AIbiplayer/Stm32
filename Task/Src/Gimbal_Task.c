@@ -29,11 +29,13 @@ static void Gimbal_Status_Serve(void);
  */
 void GimbalTask(void const* argument)
 {
+    taskENTER_CRITICAL();
     Gimbal_Init();
+    taskEXIT_CRITICAL();
     for (;;)
     {
         SubGetMessage(gimbal_sub, &gimbal_cmd_recv);
-        // Gimbal_Status_Serve();
+        Gimbal_Status_Serve();
         PubPushMessage(gimbal_pub, &gimbal_feedback_data);
         osDelay(1);
     }
@@ -50,8 +52,8 @@ static void Gimbal_Init(void)
         .Can_Init_Config = {.can_handle = &hcan1},
         .Control_Setting = {
             .Loop_Control = ANGLE_SPEED_CONTROL,
-            .Angle_Feedback_Source = OTHER_FEEDBACK,
-            .Speed_Feedback_Source = OTHER_FEEDBACK,
+            .Angle_Feedback_Source = MOTOR_FEEDBACK,
+            .Speed_Feedback_Source = MOTOR_FEEDBACK,
             .Feedforward_Flag = FEEDFORWARD_NONE,
             .Other_Angle_Feedback_Ptr = &Gimbal_IMU_Data->YawTotalAngle,
             .Other_Speed_Feedback_Ptr = &Gimbal_IMU_Data->Gyro[2],
@@ -62,12 +64,12 @@ static void Gimbal_Init(void)
     };
 
     Motor_Init_s Pitch = {
-        .Can_Init_Config = {.can_handle = &hcan2},
+        .Can_Init_Config = {.can_handle = &hcan1},
         .Control_Setting = {
             .Loop_Control = ANGLE_SPEED_CONTROL,
-            .Angle_Feedback_Source = OTHER_FEEDBACK,
-            .Speed_Feedback_Source = OTHER_FEEDBACK,
-            .Feedforward_Flag = SPEED_FEEDFORWARD,
+            .Angle_Feedback_Source = MOTOR_FEEDBACK,
+            .Speed_Feedback_Source = MOTOR_FEEDBACK,
+            .Feedforward_Flag = FEEDFORWARD_NONE,
             .Other_Angle_Feedback_Ptr = &Gimbal_IMU_Data->Pitch,
             .Other_Speed_Feedback_Ptr = &Gimbal_IMU_Data->Gyro[0],
             .Speed_Feedforward_Ptr = &Gimbal_Pitch->Measure.gravity_compensate
@@ -77,16 +79,16 @@ static void Gimbal_Init(void)
     };
 
     PID_Param(&Yaw.Control_Setting.Speed_PID,
-              10.0f,
+              5.0f,
               0,
-              150.0f,
+              1.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
               0,
               1000,
               8000);
     PID_Param(&Yaw.Control_Setting.Angle_PID,
-              45,
+              5,
               0,
               0,
               Integral_Limit | Derivative_On_Measurement,
@@ -95,16 +97,16 @@ static void Gimbal_Init(void)
               1000,
               8000);
     PID_Param(&Pitch.Control_Setting.Speed_PID,
-              10.0f,
+              5.0f,
               0,
-              150.0f,
+              1.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
               0,
               1000,
               8000);
     PID_Param(&Pitch.Control_Setting.Angle_PID,
-              45,
+              5,
               0,
               0,
               Integral_Limit | Derivative_On_Measurement,
