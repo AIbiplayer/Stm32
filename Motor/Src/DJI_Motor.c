@@ -1,5 +1,5 @@
 /**
- * @file DJT_Motor.c
+ * @file DJI_Motor.c
  * @brief 大疆电机控制
  * @author Shen Feilin
  * @date 2025/10/24
@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "robot_def.h"
+#include "power_limit.h"
 #include "stdbool.h"
 
 static uint8_t Idx = 0; ///< 电机索引
@@ -120,7 +121,6 @@ static void Motor_Grouping(DJI_Motor_Instance* DJI_Motor, CAN_Init_Config_s* Con
         Send_Enable_Flag[Group] = true;
         DJI_Motor->Send_Group = Group;
         DJI_Motor->Message_Num = InGroup_ID;
-
         break;
     case GM6020:
         if (Motor_ID < 4)
@@ -188,7 +188,7 @@ void DJI_Motor_Control(void)
     //对已注册的电机进行控制
     for (uint8_t i = 0; i < Idx; i++)
     {
-        const DJI_Motor_Instance* DJI_Instance = Instance_Group[i]; //使用指针提取电机实例
+        DJI_Motor_Instance* DJI_Instance = Instance_Group[i]; //使用指针提取电机实例
         Motor_Control_Setting_s Control_Setting = DJI_Instance->Control_Setting;
         const DJI_Motor_Measure_s Measure = DJI_Instance->Measure; //电机测量值
         float PID_Ref = Control_Setting.Target; //PID参考值
@@ -228,15 +228,27 @@ void DJI_Motor_Control(void)
         default: break;
         }
         const int16_t Set = (int16_t)PID_Ref; //CAN发送的设定值
-        const uint8_t Group = DJI_Instance->Send_Group;
-        const uint8_t InGroup_ID = DJI_Instance->Message_Num;
+        DJI_Instance->Control_Setting.Power_Estimate = power_calculate(Set, Measure.Speed);
+        DJI_Instance->Control_Setting.Power_Output = Set;
+        //功率限制
+        if (i != Idx - 1)
+            continue;
+        // power_limit();
+        for (uint8_t k = 0; k < Idx; k++)
+        {
+            DJI_Instance = Instance_Group[k];
+            Control_Setting = DJI_Instance->Control_Setting;
+            const uint8_t Group = DJI_Instance->Send_Group;
+            const uint8_t InGroup_ID = DJI_Instance->Message_Num;
 
-        sender_assignment[Group].tx_buff[2 * InGroup_ID] = (uint8_t)(Set >> 8); //高八位
-        sender_assignment[Group].tx_buff[2 * InGroup_ID + 1] = (uint8_t)Set; //低八位
+            sender_assignment[Group].tx_buff[2 * InGroup_ID] = (uint8_t)(Control_Setting.Power_Output >> 8); //高八位
+            sender_assignment[Group].tx_buff[2 * InGroup_ID + 1] = (uint8_t)Control_Setting.Power_Output; //低八位
 
-        if (DJI_Instance->Working_Type == MOTOR_STOP)
-            memset(sender_assignment[Group].tx_buff + 2 * InGroup_ID, 0, 16u);
+            if (DJI_Instance->Working_Type == MOTOR_STOP)
+                memset(sender_assignment[Group].tx_buff + 2 * InGroup_ID, 0, 16u);
+        }
     }
+
     for (uint8_t i = 0; i < 6; i++)
     {
         if (Send_Enable_Flag[i])

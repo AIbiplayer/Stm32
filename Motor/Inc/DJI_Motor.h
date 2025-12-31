@@ -1,5 +1,5 @@
 /**
- * @file DJT_Motor.h
+ * @file DJI_Motor.h
  * @brief 大疆电机控制
  * @author Shen FeiLin
  * @date 2025/10/24

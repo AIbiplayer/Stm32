@@ -11,6 +11,7 @@
 #include "DM_Motor.h"
 #include "message_center.h"
 #include "can.h"
+#include "power_limit.h"
 #include "math.h"
 #include "robot_def.h"
 
@@ -18,7 +19,6 @@ static float chassis_vx, chassis_vy, chassis_vw; // 将云台系的速度投影�
 static float Mec_V1, Mec_V2, Mec_V3, Mec_V4; // 四轮速度
 static DJI_Motor_Instance* Mec_Wheel[4];
 static DM_Motor_Instance* Track_Wheel[4];
-static float Chassis_Distance; // 超声波测得的距离
 static Chassis_Ctrl_Cmd_s chassis_cmd_recv; // 底盘接收到的控制命令
 static Chassis_Upload_Data_s chassis_feedback_data; // 底盘回传的反馈数据
 static Publisher_t* chassis_pub; // 用于发布底盘的数据
@@ -90,18 +90,22 @@ static void Chassis_Init(void)
     Mec_Chassis.Can_Init_Config.tx_id = 1;
     Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Mec_Wheel[0] = DJI_Motor_Init(&Mec_Chassis);
+    PLMotor_Register(Mec_Wheel[0]);
 
     Mec_Chassis.Can_Init_Config.tx_id = 2;
     Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Mec_Wheel[1] = DJI_Motor_Init(&Mec_Chassis);
+    PLMotor_Register(Mec_Wheel[1]);
 
     Mec_Chassis.Can_Init_Config.tx_id = 3;
     Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_REVERSE;
     Mec_Wheel[2] = DJI_Motor_Init(&Mec_Chassis);
+    PLMotor_Register(Mec_Wheel[2]);
 
     Mec_Chassis.Can_Init_Config.tx_id = 4;
     Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_REVERSE;
     Mec_Wheel[3] = DJI_Motor_Init(&Mec_Chassis);
+    PLMotor_Register(Mec_Wheel[3]);
 
     DM_Motor_Init_s Track = {
         .Can_Init_Config = {.can_handle = &hcan1},
@@ -153,7 +157,6 @@ static void Chassis_Init(void)
 /**
  * @brief 轮子速度解算函数
  * @note 底盘运动学模型，这里包含底盘与云台的角度计算等
- * @todo 此为全向轮解算，后续改为麦轮
  */
 static void Speed_Calculate(void)
 {

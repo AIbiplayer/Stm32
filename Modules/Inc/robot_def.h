@@ -122,17 +122,11 @@ typedef struct
     float vy; // 横移方向速度
     float wz; // 旋转速度
     float offset_angle; // 底盘和归中位置的夹角
-    chassis_mode_e chassis_mode;
-    chassis_mode_e chassis_last_mode;
-    int chassis_speed_buff;
-
-    double Y_set;
-    double X_set;
-    float set_angle; //由遥控器编码器算得的舵向角度
-    uint16_t set_ecd; //由反正切得到的目标编码值
+    chassis_mode_e chassis_mode : 3; // 底盘模式
+    chassis_mode_e chassis_last_mode : 3; // 底盘上一次模式
     float angle_offset_c; //云台与底盘的角度差,底盘用
 
-    Track_Mode_e track; // 履带模式
+    Track_Mode_e track : 3; // 履带模式
     float a_track_head; // 履带前轮
     float a_track_back; // 履带后轮
 } Chassis_Ctrl_Cmd_s;
@@ -143,9 +137,8 @@ typedef struct
     // 云台角度控制
     float yaw;
     float pitch;
-    float chassis_rotate_wz;
 
-    gimbal_mode_e gimbal_mode;
+    gimbal_mode_e gimbal_mode : 2; // 云台模式
     float angle_offset_g; //云台与底盘角度差，云台用
 } Gimbal_Ctrl_Cmd_s;
 

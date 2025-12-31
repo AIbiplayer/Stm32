@@ -72,8 +72,8 @@ void DM_Motor_Control(void)
         DM_Instance->Motor_Can_Instance->tx_buff[6] = *(v_ptr + 2);
         DM_Instance->Motor_Can_Instance->tx_buff[7] = *(v_ptr + 3);
 
-        if (DM_Instance->Work_Type == MOTOR_ENABLE)
-            CANTransmit(DM_Instance->Motor_Can_Instance, 1);
+        // if (DM_Instance->Work_Type == MOTOR_ENABLE)
+        //     CANTransmit(DM_Instance->Motor_Can_Instance, 1);
     }
 }
 

@@ -10,14 +10,15 @@
 #include "bsp_usart.h"
 #include "DM_Motor.h"
 #include "cmsis_os.h"
+#include "Vofa_Debug.h"
+#include "can_comm.h"
 #include "remote_control.h"
 #include "message_center.h"
 #include "robot_def.h"
+#include "TMC.h"
 
 RC_ctrl_t* RC_data; // 遥控器数据,初始化时返回
-
-extern INS_t* Gimbal_IMU_Data; ///< 云台IMU数据
-extern float HC_Measure;
+CANCommInstance* CANCOM; // 底盘或云台的CAN通信实例指针
 
 /* cmd应用包含的模块实例指针和交互信息存储*/
 static Publisher_t* chassis_cmd_pub; // 底盘控制消息发布者
@@ -35,12 +36,36 @@ static Subscriber_t* shoot_feed_sub; // 发射反馈信息订阅者
 static Shoot_Ctrl_Cmd_s shoot_cmd_send; // 传递给发射的控制信息
 static Shoot_Upload_Data_s shoot_fetch_data; // 从发射获取的反馈信息
 
+#ifdef MCU_CHASSIS // 如果是底盘板
+static CANComm_Init_Config_s TMC_CANComm_Config = {
+    .can_config = {
+        .can_handle = &hcan2,
+        .tx_id = TMC_CHASSIS_CAN_ID,
+        .rx_id = TMC_GIMBAL_CAN_ID,
+    },
+    .send_data_len = sizeof(TMC_To_Chassis_s),
+    .recv_data_len = sizeof(TMC_To_Gimbal_s)
+};
+#else
+static CANComm_Init_Config_s TMC_CANComm_Config = {
+    .can_config = {
+        .can_handle = &hcan1,
+        .tx_id = ,TMC_GIMBAL_CAN_ID
+        .rx_id = TMC_CHASSIS_CAN_ID,
+    },
+    .send_data_len = sizeof(TMC_To_Gimbal_s),
+    .recv_data_len = sizeof(TMC_To_Chassis_s)
+};
+#endif
+
 static void Robot_Cmd_Init(void);
 static void Emergency_Stop(void);
 static void CalcOffsetAngle(void);
 static void Remote_Control_Cmd_Serve(void);
 
-static PID_Typedef UPPID;
+static PID_Typedef UPPID; // 上台阶履带PID
+
+extern float HC_Measure; // 超声波测距值
 
 /**
  * @brief 命令读取与发送FreeRTOS任务
@@ -48,13 +73,10 @@ static PID_Typedef UPPID;
  */
 void CmdTask(void* argument)
 {
+    taskENTER_CRITICAL();
     DWT_Init(168);
     Robot_Cmd_Init();
-
-    taskENTER_CRITICAL();
-    Gimbal_IMU_Data = INS_Init();
     taskEXIT_CRITICAL();
-    HAL_GPIO_WritePin(LED_B_GPIO_Port,LED_B_Pin, GPIO_PIN_SET);
 
     for (;;)
     {
@@ -66,6 +88,9 @@ void CmdTask(void* argument)
         Remote_Control_Cmd_Serve();
         DJI_Motor_Control();
         DM_Motor_Control();
+
+        uint8_t TEST = 2;
+        CANCommSend(CANCOM, &TEST);
 
         PubPushMessage(shoot_cmd_pub, (void*)&shoot_cmd_send);
         PubPushMessage(chassis_cmd_pub, (void*)&chassis_cmd_send);
@@ -81,6 +106,7 @@ void CmdTask(void* argument)
 static void Robot_Cmd_Init(void)
 {
     RC_data = RemoteControlInit(&huart3);
+    CANCOM = CANCommInit(&TMC_CANComm_Config);
 
     // 上台阶履带PID参数
     PID_Param(&UPPID, -6.0f, -3.0f, 0.0f,
@@ -115,7 +141,6 @@ static void CalcOffsetAngle(void) //计算偏移角度角度范围0-360
         chassis_cmd_send.angle_offset_c = chassis_cmd_send.offset_angle - 360.0f;
     else
         chassis_cmd_send.angle_offset_c = chassis_cmd_send.offset_angle;
-
     gimbal_cmd_send.angle_offset_g = chassis_cmd_send.angle_offset_c; //统一角度差
 }
 
@@ -133,7 +158,7 @@ static void Remote_Control_Cmd_Serve(void)
     // 射击指令
     chassis_cmd_send.chassis_last_mode = chassis_cmd_send.chassis_mode;
     shoot_cmd_send.shoot_mode = SHOOT_ON;
-    HAL_GPIO_WritePin(LED_R_GPIO_Port,LED_R_Pin, GPIO_PIN_RESET);
+    LED_Red_Down;
 
     abs(RC_data[TEMP].rc.dial) > 100
         ? (shoot_cmd_send.friction_mode = FRICTION_ON)
@@ -176,10 +201,10 @@ static void Remote_Control_Cmd_Serve(void)
     switch (chassis_cmd_send.track)
     {
     case TRACK_UP:
-        // up_count = HC_Measure > 20.0f && flag == 0 ? up_count + 1 : 0;
-        // down_count = HC_Measure < 10.0f && flag == 1 ? down_count + 1 : 0;
-        // flag = up_count > 20 ? 1 : flag;
-        // flag = down_count > 20 ? 2 : flag;
+        up_count = HC_Measure > 20.0f && flag == 0 ? up_count + 1 : 0;
+        down_count = HC_Measure < 10.0f && flag == 1 ? down_count + 1 : 0;
+        flag = up_count > 20 ? 1 : flag;
+        flag = down_count > 20 ? 2 : flag;
 
         chassis_cmd_send.a_track_head += (float)RC_data[TEMP].rc.rocker_r1 * 0.00034f;
         chassis_cmd_send.a_track_head = Angle_limit(chassis_cmd_send.a_track_head, 180.0f, 0.0f);
@@ -187,8 +212,8 @@ static void Remote_Control_Cmd_Serve(void)
         chassis_cmd_send.a_track_back = Angle_limit(chassis_cmd_send.a_track_back, 180.0f, 105.0f);
         break;
     case TRACK_EXTEND:
-        chassis_cmd_send.a_track_head = 0.0f;
-        chassis_cmd_send.a_track_back = 0.0f;
+        chassis_cmd_send.a_track_head = 190.0f;
+        chassis_cmd_send.a_track_back = 190.0f;
         break;
     case TRACK_ROTATE:
         chassis_cmd_send.a_track_head = 0.0f;
@@ -222,6 +247,5 @@ static void Emergency_Stop(void)
     shoot_cmd_send.shoot_mode = SHOOT_OFF;
     shoot_cmd_send.friction_mode = FRICTION_OFF;
     shoot_cmd_send.load_mode = LOAD_STOP;
-
-    HAL_GPIO_WritePin(LED_R_GPIO_Port, LED_R_Pin, GPIO_PIN_SET);
+    LED_Red_Up;
 }

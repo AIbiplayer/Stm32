@@ -86,6 +86,8 @@ typedef struct
     PID_Typedef Angle_PID;
 
     float Target;
+    float Power_Estimate; ///< 功率估计值
+    int16_t Power_Output; ///< 功率控制后输出值
 } Motor_Control_Setting_s; ///< 电机控制设置
 
 /**

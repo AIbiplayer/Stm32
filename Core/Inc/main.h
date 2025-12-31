@@ -78,6 +78,8 @@ void Error_Handler(void);
 #define HC_SR04_ECHO_GPIO_Port GPIOE
 #define HC_SR04_TRIG_Pin GPIO_PIN_11
 #define HC_SR04_TRIG_GPIO_Port GPIOE
+#define XSHUT_Pin GPIO_PIN_12
+#define XSHUT_GPIO_Port GPIOB
 #define CS1_GYRO_Pin GPIO_PIN_0
 #define CS1_GYRO_GPIO_Port GPIOB
 

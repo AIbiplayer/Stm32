@@ -18,7 +18,7 @@ if (NOT CMAKE_BUILD_TYPE)
 endif ()
 
 # Set the project name
-set(CMAKE_PROJECT_NAME Robot-Framework-Down)
+set(CMAKE_PROJECT_NAME Robot-Framework-Up)
 
 # Enable compile command to ease indexing with e.g. clangd
 set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
@@ -46,7 +46,6 @@ file(GLOB_RECURSE ALGORITHM_SOURCE "Algorithm/Src/*c")
 file(GLOB_RECURSE MOTOR_SOURCE "Motor/Src/*c")
 file(GLOB_RECURSE MODULES_SOURCE "Modules/Src/*c")
 file(GLOB_RECURSE TASK_SOURCE "Task/Src/*c")
-file(GLOB_RECURSE VL53L0X_SOURCE "Modules/VL530X/Src/*c")
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
@@ -56,7 +55,6 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
         ${MOTOR_SOURCE}
         ${MODULES_SOURCE}
         ${TASK_SOURCE}
-        ${VL53L0X_SOURCE}
 )
 
 # Add include paths
@@ -66,7 +64,6 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
         Algorithm/Inc
         Motor/Inc
         Modules/Inc
-        Modules/VL530X/Inc
         Task/Inc
 )
 
