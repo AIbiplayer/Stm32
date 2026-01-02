@@ -15,8 +15,8 @@
 static void Shoot_Init(void);
 static void Shoot_Status_Serve(void);
 
-static DJI_Motor_Instance *Friction_L, *Friction_R;
-DJI_Motor_Instance* Load_bullet;
+CCMRAM static DJI_Motor_Instance *Friction_L, *Friction_R;
+CCMRAM DJI_Motor_Instance* Load_bullet;
 static Publisher_t* shoot_pub;
 static Shoot_Ctrl_Cmd_s shoot_cmd_recv;
 static Shoot_Upload_Data_s shoot_feedback_data;
@@ -36,7 +36,7 @@ void ShootTask(void const* argument)
     for (;;)
     {
         SubGetMessage(shoot_sub, &shoot_cmd_recv);
-        // Shoot_Status_Serve();
+        Shoot_Status_Serve();
         PubPushMessage(shoot_pub, &shoot_feedback_data);
         osDelay(1);
     }
@@ -106,15 +106,15 @@ static void Shoot_Init(void)
 
     Load.Can_Init_Config.tx_id = 1;
     Load.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
-    // Load_bullet = DJI_Motor_Init(&Load);
+    Load_bullet = DJI_Motor_Init(&Load);
 
     Friction.Can_Init_Config.tx_id = 2;
     Friction.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
-    // Friction_L = DJI_Motor_Init(&Friction);
+    Friction_L = DJI_Motor_Init(&Friction);
 
     Friction.Can_Init_Config.tx_id = 3;
     Friction.Control_Setting.Reverse_Flag = MOTOR_REVERSE;
-    // Friction_R = DJI_Motor_Init(&Friction);
+    Friction_R = DJI_Motor_Init(&Friction);
 
     shoot_sub = SubRegister("shoot_cmd", sizeof(Shoot_Ctrl_Cmd_s));
 }
@@ -135,11 +135,12 @@ static void Shoot_Status_Serve(void)
     DJI_MotorEnable(Friction_R);
     DJI_MotorEnable(Load_bullet);
 
+    // 摩擦轮控制
     switch (shoot_cmd_recv.friction_mode)
     {
     case FRICTION_ON:
-        DJI_MotorSetTarget(Friction_L, 7000);
-        DJI_MotorSetTarget(Friction_R, 7000);
+        DJI_MotorSetTarget(Friction_L, 1000);
+        DJI_MotorSetTarget(Friction_R, 1000);
         break;
     case FRICTION_OFF:
         DJI_MotorSetTarget(Friction_L, 0);
@@ -167,7 +168,7 @@ static void Shoot_Status_Serve(void)
               ? (Shoot_Relieve_Flag = 0)
               : (shoot_cmd_recv.load_mode = LOAD_REVERSE)
         : 0;
-
+    // 上弹控制
     switch (shoot_cmd_recv.load_mode)
     {
     case LOAD_STOP:
@@ -193,4 +194,13 @@ static void Shoot_Status_Serve(void)
         DJI_MotorSetTarget(Load_bullet, -7000);
         break;
     }
+}
+
+/**
+ * @brief 射击速度微调
+ */
+static float fac_calculate(float Speed1, float Speed2)
+{
+    float dif = Speed2 - Speed1;
+
 }

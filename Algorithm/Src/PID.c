@@ -9,11 +9,6 @@
 #include "PID.h"
 #include "math.h"
 
-extern float Angle[4];
-extern float Temp[4];
-extern float Speed[4];
-extern float I[4];
-
 /**
  * @brief PID初始化及参数配置
  * @param PID_ 输入结构体

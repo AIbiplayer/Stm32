@@ -8,6 +8,8 @@
 #ifndef VOFA_DEBUG_H
 #define VOFA_DEBUG_H
 
+#include "main.h"
+
 void VOFA_Print_RC(void);
 void VOFA_Print_INS(void);
 

@@ -13,8 +13,8 @@
 #include "message_center.h"
 
 INS_t* Gimbal_IMU_Data; ///< 云台IMU数据
-DJI_Motor_Instance* Gimbal_Yaw; ///<Yaw轴电机
-DJI_Motor_Instance* Gimbal_Pitch; ///<Pitch轴电机
+CCMRAM DJI_Motor_Instance* Gimbal_Yaw; ///<Yaw轴电机
+CCMRAM DJI_Motor_Instance* Gimbal_Pitch; ///<Pitch轴电机
 
 static Publisher_t* gimbal_pub; // 云台应用消息发布者(云台反馈给cmd)
 static Subscriber_t* gimbal_sub; // cmd控制消息订阅者

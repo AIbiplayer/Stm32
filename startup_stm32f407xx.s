@@ -32,6 +32,10 @@
 .global  g_pfnVectors
 .global  Default_Handler
 
+.word _siccmram
+.word _sccmram
+.word _eccmram
+
 /* start address for the initialization values of the .data section. 
 defined in linker script */
 .word  _sidata
@@ -61,7 +65,24 @@ Reset_Handler:
   ldr   sp, =_estack     /* set stack pointer */
   
 /* Call the clock system initialization function.*/
-  bl  SystemInit  
+  bl  SystemInit
+
+  /* 1. 新增：从 FLASH 拷贝初始化的数据到 CCMRAM */
+    ldr r0, =_sccmram
+    ldr r1, =_eccmram
+    ldr r2, =_siccmram
+    movs r3, #0
+    b LoopCopyCCMRAM
+
+  CopyCCMRAM:
+    ldr r4, [r2, r3]
+    str r4, [r0, r3]
+    adds r3, r3, #4
+
+  LoopCopyCCMRAM:
+    adds r4, r0, r3
+    cmp r4, r1
+    bcc CopyCCMRAM
 
 /* Copy the data segment initializers from flash to SRAM */  
   ldr r0, =_sdata
