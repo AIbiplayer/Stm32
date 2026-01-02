@@ -6,11 +6,12 @@
  */
 
 #include "bsp_dwt.h"
+#include "bsp_usb.h"
+#include  "usb_device.h"
 #include "main.h"
 #include "bsp_usart.h"
 #include "DM_Motor.h"
 #include "cmsis_os.h"
-#include "Vofa_Debug.h"
 #include "can_comm.h"
 #include "remote_control.h"
 #include "message_center.h"
@@ -50,11 +51,11 @@ static CANComm_Init_Config_s TMC_CANComm_Config = {
 static CANComm_Init_Config_s TMC_CANComm_Config = {
     .can_config = {
         .can_handle = &hcan1,
-        .tx_id = ,TMC_GIMBAL_CAN_ID
+        .tx_id = TMC_GIMBAL_CAN_ID,
         .rx_id = TMC_CHASSIS_CAN_ID,
     },
-    .send_data_len = sizeof(TMC_To_Gimbal_s),
-    .recv_data_len = sizeof(TMC_To_Chassis_s)
+    .send_data_len = sizeof(uint64_t),
+    .recv_data_len = sizeof(uint64_t)
 };
 #endif
 
@@ -66,6 +67,7 @@ static void Remote_Control_Cmd_Serve(void);
 static PID_Typedef UPPID; // 上台阶履带PID
 
 extern float HC_Measure; // 超声波测距值
+extern USB_Control_t g_usb_dev; // 全局USB设备实例
 
 /**
  * @brief 命令读取与发送FreeRTOS任务
@@ -76,6 +78,8 @@ void CmdTask(void* argument)
     taskENTER_CRITICAL();
     DWT_Init(168);
     Robot_Cmd_Init();
+    MX_USB_DEVICE_Init();
+    HAL_GPIO_WritePin(GPIOA,GPIO_PIN_12, GPIO_PIN_RESET); //USB DP拉低，重新枚举
     taskEXIT_CRITICAL();
 
     for (;;)
@@ -89,8 +93,13 @@ void CmdTask(void* argument)
         DJI_Motor_Control();
         DM_Motor_Control();
 
-        uint8_t TEST = 2;
-        CANCommSend(CANCOM, &TEST);
+        uint64_t TEST = 0x1111111111111111;
+        CANCommSend(CANCOM, (uint8_t*)&TEST);
+
+        bsp_usb_transmit((uint8_t*)&TEST, sizeof(TEST));
+
+        if (g_usb_dev.rx_flag)
+            LED_Blue_Up;
 
         PubPushMessage(shoot_cmd_pub, (void*)&shoot_cmd_send);
         PubPushMessage(chassis_cmd_pub, (void*)&chassis_cmd_send);

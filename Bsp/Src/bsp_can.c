@@ -114,8 +114,8 @@ void CANSetDLC(CANInstance* _instance, uint8_t length)
 {
     // 发送长度错误!检查调用参数是否出错,或出现野指针/越界访问
     if (length > 8 || length == 0) // 安全检查
-        while (1)
-            _instance->txconf.DLC = length;
+        while (1);
+    _instance->txconf.DLC = length;
 }
 
 /* -----------------------belows are callback definitions--------------------------*/

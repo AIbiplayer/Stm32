@@ -8,7 +8,6 @@
 #include "usb_device.h"
 #include "cmsis_os.h"
 #include "INS.h"
-#include "Vofa_Debug.h"
 #include "HC_SR04.h"
 
 extern INS_t* Gimbal_IMU_Data; ///< 云台IMU数据
@@ -23,7 +22,6 @@ static uint8_t Count = 0; ///< 计数器
 void INSTask(void const* argument)
 {
     taskENTER_CRITICAL();
-    MX_USB_DEVICE_Init();
     Gimbal_IMU_Data = INS_Init();
     HC_Init();
     LED_Green_Up;

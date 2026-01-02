@@ -195,12 +195,3 @@ static void Shoot_Status_Serve(void)
         break;
     }
 }
-
-/**
- * @brief 射击速度微调
- */
-static float fac_calculate(float Speed1, float Speed2)
-{
-    float dif = Speed2 - Speed1;
-
-}
