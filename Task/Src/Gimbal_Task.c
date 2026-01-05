@@ -5,12 +5,16 @@
  * @date 2025/11/7
  */
 
+
+#include "TMC.h"
 #include "main.h"
 #include "cmsis_os.h"
 #include "INS.h"
 #include "robot_def.h"
 #include "dji_motor.h"
 #include "message_center.h"
+
+#ifdef MCU_CHASSIS // 如果是云台板
 
 INS_t* Gimbal_IMU_Data; ///< 云台IMU数据
 CCMRAM DJI_Motor_Instance* Gimbal_Yaw; ///<Yaw轴电机
@@ -153,5 +157,9 @@ static void Gimbal_Status_Serve(void)
         break;
     }
     gimbal_feedback_data.gimbal_imu_data = *Gimbal_IMU_Data;
-    gimbal_feedback_data.yaw_motor_single_round_angle = (uint16_t)Gimbal_Yaw->Measure.Angle;
+    int16_t Round_Angle = (int16_t)Gimbal_IMU_Data->Yaw + 181 + (int16_t)gimbal_cmd_recv.yaw;
+    gimbal_feedback_data.yaw_motor_single_round_angle = Round_Angle > 0? Round_Angle % 360 :
+        (Round_Angle % 360 + 360) % 360;
 }
+
+#endif

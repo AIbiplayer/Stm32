@@ -5,6 +5,7 @@
  * @date 2025/10/24
  */
 
+#include "TMC.h"
 #include "cmsis_os.h"
 #include "Motor_Def.h"
 #include "DJI_Motor.h"
@@ -14,6 +15,8 @@
 #include "power_limit.h"
 #include "math.h"
 #include "robot_def.h"
+
+#ifdef MCU_CHASSIS // 如果是底盘板
 
 static float chassis_vx, chassis_vy, chassis_vw; // 将云台系的速度投影到底盘
 static float Mec_V1, Mec_V2, Mec_V3, Mec_V4; // 四轮速度
@@ -62,7 +65,7 @@ static void Chassis_Init(void)
 {
     //初始化电机模型
     Motor_Init_s Mec_Chassis = {
-        .Can_Init_Config = {.can_handle = &hcan2},
+        .Can_Init_Config = {.can_handle = &hcan1},
         .Control_Setting = {
             .Loop_Control = SPEED_CONTROL,
             .Angle_Feedback_Source = MOTOR_FEEDBACK,
@@ -90,63 +93,63 @@ static void Chassis_Init(void)
     Mec_Chassis.Can_Init_Config.tx_id = 1;
     Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Mec_Wheel[0] = DJI_Motor_Init(&Mec_Chassis);
-    PLMotor_Register(Mec_Wheel[0]);
+    // PLMotor_Register(Mec_Wheel[0]);
 
     Mec_Chassis.Can_Init_Config.tx_id = 2;
     Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Mec_Wheel[1] = DJI_Motor_Init(&Mec_Chassis);
-    PLMotor_Register(Mec_Wheel[1]);
+    // PLMotor_Register(Mec_Wheel[1]);
 
     Mec_Chassis.Can_Init_Config.tx_id = 3;
     Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_REVERSE;
     Mec_Wheel[2] = DJI_Motor_Init(&Mec_Chassis);
-    PLMotor_Register(Mec_Wheel[2]);
+    // PLMotor_Register(Mec_Wheel[2]);
 
     Mec_Chassis.Can_Init_Config.tx_id = 4;
     Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_REVERSE;
     Mec_Wheel[3] = DJI_Motor_Init(&Mec_Chassis);
-    PLMotor_Register(Mec_Wheel[3]);
+    // PLMotor_Register(Mec_Wheel[3]);
 
-    DM_Motor_Init_s Track = {
-        .Can_Init_Config = {.can_handle = &hcan1},
-        .DM_Control = {
-            .Angle_Feedback_Source = MOTOR_FEEDBACK,
-            .Speed_Feedback_Source = MOTOR_FEEDBACK,
-            .Other_Angle_Feedback_Ptr = NULL,
-            .Other_Speed_Feedback_Ptr = NULL
-        },
-        .Working_Type = MOTOR_ENABLE,
-        .Mode = pos_mode
-    };
+    // DM_Motor_Init_s Track = {
+    //     .Can_Init_Config = {.can_handle = &hcan1},
+    //     .DM_Control = {
+    //         .Angle_Feedback_Source = MOTOR_FEEDBACK,
+    //         .Speed_Feedback_Source = MOTOR_FEEDBACK,
+    //         .Other_Angle_Feedback_Ptr = NULL,
+    //         .Other_Speed_Feedback_Ptr = NULL
+    //     },
+    //     .Working_Type = MOTOR_ENABLE,
+    //     .Mode = pos_mode
+    // };
+    //
+    // Track.Can_Init_Config.rx_id = 1;
+    // Track.DM_Control.Reverse_Flag = MOTOR_REVERSE;
+    // // Track_Wheel[0] = DM_Motor_Init(&Track);
+    //
+    // Track.Can_Init_Config.rx_id = 3;
+    // Track.DM_Control.Reverse_Flag = MOTOR_NORMAL;
+    // // Track_Wheel[1] = DM_Motor_Init(&Track);
+    //
+    // Track.Can_Init_Config.rx_id = 5;
+    // Track.DM_Control.Reverse_Flag = MOTOR_REVERSE;
+    // // Track_Wheel[2] = DM_Motor_Init(&Track);
+    //
+    // Track.Can_Init_Config.rx_id = 7;
+    // Track.DM_Control.Reverse_Flag = MOTOR_NORMAL;
+    // Track_Wheel[3] = DM_Motor_Init(&Track);
 
-    Track.Can_Init_Config.rx_id = 1;
-    Track.DM_Control.Reverse_Flag = MOTOR_REVERSE;
-    Track_Wheel[0] = DM_Motor_Init(&Track);
-
-    Track.Can_Init_Config.rx_id = 3;
-    Track.DM_Control.Reverse_Flag = MOTOR_NORMAL;
-    Track_Wheel[1] = DM_Motor_Init(&Track);
-
-    Track.Can_Init_Config.rx_id = 5;
-    Track.DM_Control.Reverse_Flag = MOTOR_REVERSE;
-    Track_Wheel[2] = DM_Motor_Init(&Track);
-
-    Track.Can_Init_Config.rx_id = 7;
-    Track.DM_Control.Reverse_Flag = MOTOR_NORMAL;
-    Track_Wheel[3] = DM_Motor_Init(&Track);
-
-    DM_MotorEnable(Track_Wheel[0]);
-    DM_MotorEnable(Track_Wheel[1]);
-    DM_MotorEnable(Track_Wheel[2]);
-    DM_MotorEnable(Track_Wheel[3]);
-
-    DM_MotorSaveZero(Track_Wheel[0]);
-    DM_MotorSaveZero(Track_Wheel[1]);
-    DM_MotorSaveZero(Track_Wheel[2]);
-    DM_MotorSaveZero(Track_Wheel[3]);
+    // DM_MotorEnable(Track_Wheel[0]);
+    // DM_MotorEnable(Track_Wheel[1]);
+    // DM_MotorEnable(Track_Wheel[2]);
+    // DM_MotorEnable(Track_Wheel[3]);
+    //
+    // DM_MotorSaveZero(Track_Wheel[0]);
+    // DM_MotorSaveZero(Track_Wheel[1]);
+    // DM_MotorSaveZero(Track_Wheel[2]);
+    // DM_MotorSaveZero(Track_Wheel[3]);
 
     PID_Param(&WZ_ROTATE_PID, 0.0f, 50.0f, 0, Integral_Limit | Derivative_On_Measurement,
-              1.0f, 0.0f, 50, 2500);
+              1.0f, 0.0f, 100, 5000);
     PID_Param(&WZ_FOLLOW_PID, 2.7f, 0.0f, 0.1f, Integral_Limit | Derivative_On_Measurement | OutputFilter,
               0.9f, 0.0f, 20, 200);
 
@@ -170,8 +173,8 @@ static void Speed_Calculate(void)
     case CHASSIS_FOLLOW_GIMBAL_YAW:
         {
             PID_Clean_I(&WZ_ROTATE_PID);
-            chassis_vy = chassis_cmd_recv.vx;
-            chassis_vx = chassis_cmd_recv.vy;
+            chassis_vy = chassis_cmd_recv.vy;
+            chassis_vx = chassis_cmd_recv.vx;
             // chassis_vx = chassis_cmd_recv.vx * cos_theta - chassis_cmd_recv.vy * sin_theta;
             // chassis_vy = chassis_cmd_recv.vx * sin_theta + chassis_cmd_recv.vy * cos_theta;
             //
@@ -184,16 +187,17 @@ static void Speed_Calculate(void)
     case CHASSIS_ROTATE:
         {
             PID_Clean_I(&WZ_FOLLOW_PID);
+            WZ_ROTATE_PID.Max_Output = chassis_cmd_recv.wz;
             chassis_vw = PID_Calculate(&WZ_ROTATE_PID, 0.1f, 0);
-            chassis_vx = chassis_cmd_recv.vx * cos_theta - chassis_cmd_recv.vy * sin_theta;
-            chassis_vy = chassis_cmd_recv.vx * sin_theta + chassis_cmd_recv.vy * cos_theta;
+            chassis_vx = chassis_cmd_recv.vx * cos_theta + chassis_cmd_recv.vy * sin_theta;
+            chassis_vy = -chassis_cmd_recv.vx * sin_theta + chassis_cmd_recv.vy * cos_theta;
             break;
         }
     case CHASSIS_INDEPENDENCE:
         {
             PID_Clean_I(&WZ_ROTATE_PID);
             PID_Clean_I(&WZ_FOLLOW_PID);
-            chassis_vx = chassis_cmd_recv.vy;
+            chassis_vy = chassis_cmd_recv.vy;
             break;
         }
     default:
@@ -219,10 +223,10 @@ static void Chassis_Status_Serve(void)
         DJI_MotorStop(Mec_Wheel[2]);
         DJI_MotorStop(Mec_Wheel[3]);
 
-        DM_MotorStop(Track_Wheel[0]);
-        DM_MotorStop(Track_Wheel[1]);
-        DM_MotorStop(Track_Wheel[2]);
-        DM_MotorStop(Track_Wheel[3]);
+        // DM_MotorStop(Track_Wheel[0]);
+        // DM_MotorStop(Track_Wheel[1]);
+        // DM_MotorStop(Track_Wheel[2]);
+        // DM_MotorStop(Track_Wheel[3]);
     }
     else if (chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE
         && chassis_cmd_recv.chassis_last_mode == CHASSIS_ZERO_FORCE)
@@ -232,10 +236,10 @@ static void Chassis_Status_Serve(void)
         DJI_MotorEnable(Mec_Wheel[2]);
         DJI_MotorEnable(Mec_Wheel[3]);
 
-        DM_MotorEnable(Track_Wheel[0]);
-        DM_MotorEnable(Track_Wheel[1]);
-        DM_MotorEnable(Track_Wheel[2]);
-        DM_MotorEnable(Track_Wheel[3]);
+        // DM_MotorEnable(Track_Wheel[0]);
+        // DM_MotorEnable(Track_Wheel[1]);
+        // DM_MotorEnable(Track_Wheel[2]);
+        // DM_MotorEnable(Track_Wheel[3]);
     }
 }
 
@@ -249,8 +253,10 @@ static void Chassis_Output(void)
     DJI_MotorSetTarget(Mec_Wheel[2], Mec_V3);
     DJI_MotorSetTarget(Mec_Wheel[3], Mec_V4);
 
-    DM_MotorSet(Track_Wheel[0], chassis_cmd_recv.a_track_head * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 12.2f);
-    DM_MotorSet(Track_Wheel[1], chassis_cmd_recv.a_track_head * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 12.2f);
-    DM_MotorSet(Track_Wheel[2], chassis_cmd_recv.a_track_back * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 12.2f);
-    DM_MotorSet(Track_Wheel[3], chassis_cmd_recv.a_track_back * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 12.2f);
+    // DM_MotorSet(Track_Wheel[0], chassis_cmd_recv.a_track_head * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 12.2f);
+    // DM_MotorSet(Track_Wheel[1], chassis_cmd_recv.a_track_head * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 12.2f);
+    // DM_MotorSet(Track_Wheel[2], chassis_cmd_recv.a_track_back * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 12.2f);
+    // DM_MotorSet(Track_Wheel[3], chassis_cmd_recv.a_track_back * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 12.2f);
 }
+
+#endif

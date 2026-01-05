@@ -33,6 +33,7 @@ typedef struct //@todo 后续补充底盘反馈数据
 
 typedef struct
 {
+
 } TMC_To_Gimbal_s; ///< 从底盘发送到云台的控制数据结构体
 #pragma pack()
 

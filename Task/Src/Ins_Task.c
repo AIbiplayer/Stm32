@@ -24,14 +24,14 @@ void INSTask(void const* argument)
     taskENTER_CRITICAL();
     MX_USB_DEVICE_Init();
     Gimbal_IMU_Data = INS_Init();
-    HC_Init();
+    // HC_Init();
     LED_Green_Up;
     taskEXIT_CRITICAL();
     for (;;)
     {
         INS_Task();
         osDelay(1);
-        Count == 1 ? HC_Send_Trig() : Count > 20 ? (HC_Measure = HC_Get_Measure(), Count = 0) : 0;
-        Count++;
+        // Count == 1 ? HC_Send_Trig() : Count > 20 ? (HC_Measure = HC_Get_Measure(), Count = 0) : 0;
+        // Count++;
     }
 }
