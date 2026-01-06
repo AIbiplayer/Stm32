@@ -5,6 +5,7 @@
  * @date 2025/10/24
  */
 
+
 #include "cmsis_os.h"
 #include "Motor_Def.h"
 #include "DJI_Motor.h"
@@ -14,41 +15,40 @@
 #include "power_limit.h"
 #include "math.h"
 #include "robot_def.h"
+#include "TMC.h"
+
+#ifdef MCU_CHASSIS
 
 static float chassis_vx, chassis_vy, chassis_vw; // 将云台系的速度投影到底盘
 static float Mec_V1, Mec_V2, Mec_V3, Mec_V4; // 四轮速度
-static DJI_Motor_Instance* Mec_Wheel[4];
-static DM_Motor_Instance* Track_Wheel[4];
+CCMRAM static DJI_Motor_Instance *Mec_Wheel[4];
+CCMRAM static DM_Motor_Instance *Track_Wheel[4];
 static Chassis_Ctrl_Cmd_s chassis_cmd_recv; // 底盘接收到的控制命令
 static Chassis_Upload_Data_s chassis_feedback_data; // 底盘回传的反馈数据
-static Publisher_t* chassis_pub; // 用于发布底盘的数据
-static Subscriber_t* chassis_sub; // 用于订阅底盘的控制命令
 static PID_Typedef WZ_ROTATE_PID, WZ_FOLLOW_PID;
 
 Track_Mode_e Chassis_Track_Mode; ///< 底盘履带模式
 
 static void Chassis_Init(void);
+
 static void Chassis_Output(void);
+
 static void Chassis_Status_Serve(void);
+
 static void Speed_Calculate(void);
 
 /**
  * @brief 底盘FreeRTOS任务
  */
-void ChassisTask(void* argument)
-{
+void ChassisTask(void *argument) {
     taskENTER_CRITICAL();
     Chassis_Init();
     taskEXIT_CRITICAL();
-    for (;;)
-    {
-        SubGetMessage(chassis_sub, &chassis_cmd_recv);
+    for (;;) {
 
         Speed_Calculate();
         Chassis_Status_Serve();
         Chassis_Output();
-
-        PubPushMessage(chassis_pub, &chassis_feedback_data);
 
         osDelay(1);
     }
@@ -58,8 +58,7 @@ void ChassisTask(void* argument)
  * @brief 底盘初始化
  * @note PID参数在此调整
  */
-static void Chassis_Init(void)
-{
+static void Chassis_Init(void) {
     //初始化电机模型
     Motor_Init_s Mec_Chassis = {
         .Can_Init_Config = {.can_handle = &hcan2},
@@ -108,7 +107,7 @@ static void Chassis_Init(void)
     PLMotor_Register(Mec_Wheel[3]);
 
     DM_Motor_Init_s Track = {
-        .Can_Init_Config = {.can_handle = &hcan1},
+        .Can_Init_Config = {.can_handle = &hcan2},
         .DM_Control = {
             .Angle_Feedback_Source = MOTOR_FEEDBACK,
             .Speed_Feedback_Source = MOTOR_FEEDBACK,
@@ -127,6 +126,7 @@ static void Chassis_Init(void)
     Track.DM_Control.Reverse_Flag = MOTOR_NORMAL;
     Track_Wheel[1] = DM_Motor_Init(&Track);
 
+    Track.Can_Init_Config.can_handle = &hcan1;
     Track.Can_Init_Config.rx_id = 5;
     Track.DM_Control.Reverse_Flag = MOTOR_REVERSE;
     Track_Wheel[2] = DM_Motor_Init(&Track);
@@ -150,55 +150,46 @@ static void Chassis_Init(void)
     PID_Param(&WZ_FOLLOW_PID, 2.7f, 0.0f, 0.1f, Integral_Limit | Derivative_On_Measurement | OutputFilter,
               0.9f, 0.0f, 20, 200);
 
-    chassis_sub = SubRegister("chassis_cmd", sizeof(Chassis_Ctrl_Cmd_s));
-    chassis_pub = PubRegister("chassis_feed", sizeof(Chassis_Upload_Data_s));
 }
 
 /**
  * @brief 轮子速度解算函数
  * @note 底盘运动学模型，这里包含底盘与云台的角度计算等
  */
-static void Speed_Calculate(void)
-{
+static void Speed_Calculate(void) {
     static float sin_theta, cos_theta; // 夹角正余弦值
     cos_theta = cosf(chassis_cmd_recv.offset_angle * DEGREE_2_RAD); // 角度*pai/180
     sin_theta = sinf(chassis_cmd_recv.offset_angle * DEGREE_2_RAD);
     chassis_vw = chassis_cmd_recv.wz;
 
-    switch (chassis_cmd_recv.chassis_mode)
-    {
-    case CHASSIS_FOLLOW_GIMBAL_YAW:
-        {
+    switch (chassis_cmd_recv.chassis_mode) {
+        case CHASSIS_FOLLOW_GIMBAL_YAW: {
             PID_Clean_I(&WZ_ROTATE_PID);
-            chassis_vy = chassis_cmd_recv.vx;
-            chassis_vx = chassis_cmd_recv.vy;
-            // chassis_vx = chassis_cmd_recv.vx * cos_theta - chassis_cmd_recv.vy * sin_theta;
-            // chassis_vy = chassis_cmd_recv.vx * sin_theta + chassis_cmd_recv.vy * cos_theta;
-            //
-            // if (fabsf(chassis_cmd_recv.angle_offset_c) >= 8.0f)
-            //     chassis_vw = PID_Calculate(&WZ_FOLLOW_PID, 0, chassis_cmd_recv.angle_offset_c);
-            // else
-            //     chassis_vw = 0;
+            chassis_vx = chassis_cmd_recv.vx * cos_theta - chassis_cmd_recv.vy * sin_theta;
+            chassis_vy = chassis_cmd_recv.vx * sin_theta + chassis_cmd_recv.vy * cos_theta;
+
+            if (fabsf(chassis_cmd_recv.angle_offset_c) >= 8.0f)
+                chassis_vw = PID_Calculate(&WZ_FOLLOW_PID, 0, chassis_cmd_recv.angle_offset_c);
+            else
+                chassis_vw = 0;
             break;
         }
-    case CHASSIS_ROTATE:
-        {
+        case CHASSIS_ROTATE: {
             PID_Clean_I(&WZ_FOLLOW_PID);
             chassis_vw = PID_Calculate(&WZ_ROTATE_PID, 0.1f, 0);
             chassis_vx = chassis_cmd_recv.vx * cos_theta - chassis_cmd_recv.vy * sin_theta;
             chassis_vy = chassis_cmd_recv.vx * sin_theta + chassis_cmd_recv.vy * cos_theta;
             break;
         }
-    case CHASSIS_INDEPENDENCE:
-        {
+        case CHASSIS_INDEPENDENCE: {
             PID_Clean_I(&WZ_ROTATE_PID);
             PID_Clean_I(&WZ_FOLLOW_PID);
             chassis_vx = chassis_cmd_recv.vy;
             break;
         }
-    default:
-        PID_Clean_I(&WZ_ROTATE_PID);
-        break;
+        default:
+            PID_Clean_I(&WZ_ROTATE_PID);
+            break;
     }
     Mec_V1 = (chassis_vx - chassis_vy + chassis_vw * LF_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL;
     Mec_V2 = -(chassis_vx + chassis_vy - chassis_vw * LB_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL;
@@ -209,11 +200,9 @@ static void Speed_Calculate(void)
 /**
  * @brief 底盘运动状态识别
  */
-static void Chassis_Status_Serve(void)
-{
+static void Chassis_Status_Serve(void) {
     if (chassis_cmd_recv.chassis_mode == CHASSIS_ZERO_FORCE
-        && chassis_cmd_recv.chassis_last_mode != chassis_cmd_recv.chassis_mode)
-    {
+        && chassis_cmd_recv.chassis_last_mode != chassis_cmd_recv.chassis_mode) {
         DJI_MotorStop(Mec_Wheel[0]);
         DJI_MotorStop(Mec_Wheel[1]);
         DJI_MotorStop(Mec_Wheel[2]);
@@ -223,10 +212,8 @@ static void Chassis_Status_Serve(void)
         DM_MotorStop(Track_Wheel[1]);
         DM_MotorStop(Track_Wheel[2]);
         DM_MotorStop(Track_Wheel[3]);
-    }
-    else if (chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE
-        && chassis_cmd_recv.chassis_last_mode == CHASSIS_ZERO_FORCE)
-    {
+    } else if (chassis_cmd_recv.chassis_mode != CHASSIS_ZERO_FORCE
+               && chassis_cmd_recv.chassis_last_mode == CHASSIS_ZERO_FORCE) {
         DJI_MotorEnable(Mec_Wheel[0]);
         DJI_MotorEnable(Mec_Wheel[1]);
         DJI_MotorEnable(Mec_Wheel[2]);
@@ -242,8 +229,7 @@ static void Chassis_Status_Serve(void)
 /**
  * @brief 底盘速度输出至电机
  */
-static void Chassis_Output(void)
-{
+static void Chassis_Output(void) {
     DJI_MotorSetTarget(Mec_Wheel[0], Mec_V1);
     DJI_MotorSetTarget(Mec_Wheel[1], Mec_V2);
     DJI_MotorSetTarget(Mec_Wheel[2], Mec_V3);
@@ -254,3 +240,5 @@ static void Chassis_Output(void)
     DM_MotorSet(Track_Wheel[2], chassis_cmd_recv.a_track_back * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 12.2f);
     DM_MotorSet(Track_Wheel[3], chassis_cmd_recv.a_track_back * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 12.2f);
 }
+
+#endif

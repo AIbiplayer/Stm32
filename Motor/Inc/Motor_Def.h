@@ -37,7 +37,7 @@ typedef enum
 typedef enum
 {
     FEEDFORWARD_NONE = 0,
-    SPEED_FEEDFORWARD
+    CURRENT_FEEDFORWARD
 } Feedforward_Type_e;
 
 /* 反馈量正反标志 */
@@ -80,7 +80,7 @@ typedef struct
     float* Other_Speed_Feedback_Ptr; // 速度反馈指针
 
     Feedforward_Type_e Feedforward_Flag; // 前馈标志
-    float* Speed_Feedforward_Ptr; // 速度前馈指针
+    float* Feedforward_Ptr; // 前馈指针
 
     PID_Typedef Speed_PID;
     PID_Typedef Angle_PID;

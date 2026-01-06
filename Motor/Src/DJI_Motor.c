@@ -227,6 +227,11 @@ void DJI_Motor_Control(void)
             break;
         default: break;
         }
+        PID_Ref = Control_Setting.Feedforward_Flag == CURRENT_FEEDFORWARD
+                      && Control_Setting.Feedforward_Ptr != NULL
+                          ? PID_Ref + *Control_Setting.Feedforward_Ptr
+                          : PID_Ref;
+
         const int16_t Set = (int16_t)PID_Ref; //CAN发送的设定值
         DJI_Instance->Control_Setting.Power_Estimate = power_calculate(Set, Measure.Speed);
         DJI_Instance->Control_Setting.Power_Output = Set;

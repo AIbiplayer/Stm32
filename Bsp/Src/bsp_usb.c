@@ -1,7 +1,7 @@
 #include "bsp_usb.h"
 #include <string.h>
 
-USB_Control_t g_usb_dev; // 全局USB设备实例
+CCMRAM USB_Control_t g_usb_dev; // 全局USB设备实例
 
 /**
  * @brief USB 发送封装
