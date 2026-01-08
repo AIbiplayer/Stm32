@@ -1,4 +1,5 @@
 #include "bsp_usb.h"
+#include "main.h"
 #include <string.h>
 
 CCMRAM USB_Control_t g_usb_dev; // 全局USB设备实例
@@ -23,8 +24,10 @@ void bsp_usb_receive_callback(uint8_t* buf, uint32_t len)
     // 简单处理：将数据拷贝至全局缓冲区
     if (len < USB_RX_BUF_SIZE)
     {
+        LED_Green_Down;
         memcpy(g_usb_dev.rx_buffer, buf, len);
         g_usb_dev.rx_len = len;
+        g_usb_dev.rx_callback();
         g_usb_dev.rx_flag = 1; // 触发应用层逻辑
     }
 

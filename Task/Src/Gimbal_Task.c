@@ -13,8 +13,6 @@
 #include "message_center.h"
 #include "TMC.h"
 
-#ifdef MCU_GIMBAL
-
 INS_t *Gimbal_IMU_Data; ///< 云台IMU数据
 CCMRAM DJI_Motor_Instance *Gimbal_Yaw; ///<Yaw轴电机
 CCMRAM DJI_Motor_Instance *Gimbal_Pitch; ///<Pitch轴电机
@@ -32,15 +30,23 @@ static void Gimbal_Status_Serve(void);
  * @brief 云台任务
  */
 void GimbalTask(void const *argument) {
+
+#ifdef MCU_GIMBAL
     taskENTER_CRITICAL();
     Gimbal_Init();
     taskEXIT_CRITICAL();
+#endif
+
     for (;;) {
+
+#ifdef MCU_GIMBAL
         SubGetMessage(gimbal_sub, &gimbal_cmd_recv);
 
         Gimbal_Status_Serve();
 
         PubPushMessage(gimbal_pub, &gimbal_feedback_data);
+#endif
+
         osDelay(1);
     }
 }
@@ -82,8 +88,8 @@ static void Gimbal_Init(void) {
     };
 
     PID_Param(&Yaw.Control_Setting.Speed_PID,
-              20.0f,
-              1.0f,
+              20.0f, // 原20，0,1500
+              0.0f,
               1500.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
@@ -91,7 +97,7 @@ static void Gimbal_Init(void) {
               100,
               8000);
     PID_Param(&Yaw.Control_Setting.Angle_PID,
-              45.0f,
+              45.0f,// 原45，0，0
               0.0f,
               0.0f,
               Integral_Limit | Derivative_On_Measurement,
@@ -100,9 +106,9 @@ static void Gimbal_Init(void) {
               1000,
               8000);
     PID_Param(&Pitch.Control_Setting.Speed_PID,
-              65.0f,
+              65.0f, // 原65, 0,0
               0,
-              0.0f,
+              1000.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
               0,
@@ -111,7 +117,7 @@ static void Gimbal_Init(void) {
     PID_Param(&Pitch.Control_Setting.Angle_PID,
               35.0f,
               0,
-              1000.0f,
+              0.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
               0,
@@ -156,5 +162,3 @@ static void Gimbal_Status_Serve(void) {
     gimbal_feedback_data.gimbal_imu_data = *Gimbal_IMU_Data;
     gimbal_feedback_data.yaw_motor_single_round_angle = (uint16_t) Gimbal_Yaw->Measure.Angle;
 }
-
-#endif

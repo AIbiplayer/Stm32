@@ -5,7 +5,6 @@
  * @date 2025/10/24
  */
 
-
 #include "cmsis_os.h"
 #include "Motor_Def.h"
 #include "DJI_Motor.h"
@@ -16,8 +15,9 @@
 #include "math.h"
 #include "robot_def.h"
 #include "TMC.h"
+#include "can_comm.h"
 
-#ifdef MCU_CHASSIS
+#ifndef MCU_CHASSIS
 
 static float chassis_vx, chassis_vy, chassis_vw; // 将云台系的速度投影到底盘
 static float Mec_V1, Mec_V2, Mec_V3, Mec_V4; // 四轮速度
@@ -27,7 +27,9 @@ static Chassis_Ctrl_Cmd_s chassis_cmd_recv; // 底盘接收到的控制命令
 static Chassis_Upload_Data_s chassis_feedback_data; // 底盘回传的反馈数据
 static PID_Typedef WZ_ROTATE_PID, WZ_FOLLOW_PID;
 
+static TMC_To_Chassis_s *Chassis_Data; // 底盘与云台数据结构体实例
 Track_Mode_e Chassis_Track_Mode; ///< 底盘履带模式
+extern CANCommInstance *CANCOM;
 
 static void Chassis_Init(void);
 
@@ -45,11 +47,9 @@ void ChassisTask(void *argument) {
     Chassis_Init();
     taskEXIT_CRITICAL();
     for (;;) {
-
         Speed_Calculate();
         Chassis_Status_Serve();
         Chassis_Output();
-
         osDelay(1);
     }
 }
@@ -69,7 +69,7 @@ static void Chassis_Init(void) {
             .Feedforward_Flag = FEEDFORWARD_NONE,
             .Other_Angle_Feedback_Ptr = NULL,
             .Other_Speed_Feedback_Ptr = NULL,
-            .Speed_Feedforward_Ptr = NULL
+            .Feedforward_Ptr = NULL
         },
         .Motor_Type = M3508,
         .Working_Type = MOTOR_ENABLE
@@ -149,7 +149,6 @@ static void Chassis_Init(void) {
               1.0f, 0.0f, 50, 2500);
     PID_Param(&WZ_FOLLOW_PID, 2.7f, 0.0f, 0.1f, Integral_Limit | Derivative_On_Measurement | OutputFilter,
               0.9f, 0.0f, 20, 200);
-
 }
 
 /**
@@ -157,6 +156,10 @@ static void Chassis_Init(void) {
  * @note 底盘运动学模型，这里包含底盘与云台的角度计算等
  */
 static void Speed_Calculate(void) {
+    Chassis_Data = (TMC_To_Chassis_s *) CANCommGet(CANCOM);
+    if (Chassis_Data != NULL)
+        chassis_cmd_recv = Chassis_Data->Chassis_Cmd;
+
     static float sin_theta, cos_theta; // 夹角正余弦值
     cos_theta = cosf(chassis_cmd_recv.offset_angle * DEGREE_2_RAD); // 角度*pai/180
     sin_theta = sinf(chassis_cmd_recv.offset_angle * DEGREE_2_RAD);
@@ -191,10 +194,11 @@ static void Speed_Calculate(void) {
             PID_Clean_I(&WZ_ROTATE_PID);
             break;
     }
-    Mec_V1 = (chassis_vx - chassis_vy + chassis_vw * LF_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL;
-    Mec_V2 = -(chassis_vx + chassis_vy - chassis_vw * LB_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL;
-    Mec_V3 = (chassis_vx - chassis_vy - chassis_vw * RB_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL;
-    Mec_V4 = -(chassis_vx + chassis_vy + chassis_vw * RF_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL;
+    // 线速度为mm/s，角速度为转/s，轮子速度为rpm
+    Mec_V1 = (chassis_vx - chassis_vy + chassis_vw * LF_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL * RADS_2_RPM;
+    Mec_V2 = -(chassis_vx + chassis_vy - chassis_vw * LB_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL * RADS_2_RPM;
+    Mec_V3 = (chassis_vx - chassis_vy - chassis_vw * RB_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL * RADS_2_RPM;
+    Mec_V4 = -(chassis_vx + chassis_vy + chassis_vw * RF_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL * RADS_2_RPM;
 }
 
 /**

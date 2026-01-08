@@ -1,39 +1,30 @@
+/**
+ * @file master_process.c
+ * @author neozng
+ * @brief  module for recv&send vision data
+ * @version beta
+ * @date 2022-11-03
+ * @todo 增加对串口调试助手协议的支持,包括vofa和serial debug
+ * @copyright Copyright (c) 2022
+ *
+ */
 
-#include "master_process.h"
 #include "seasky_protocol.h"
+#include "master_process.h"
+#include "bsp_usb.h"
 #include "robot_def.h"
+#include "main.h"
 
+CCMRAM static Vision_Recv_s recv_data; // 接收到的数据
+CCMRAM static Vision_Send_s send_data; // 待发送的数据
+CCMRAM static uint8_t send_buff[VISION_SEND_SIZE]; // 发送缓冲区
 
-static Vision_Recv_s recv_data;
-static Vision_Send_s send_data;
-//static DaemonInstance *vision_daemon_instance;
+extern USB_Control_t g_usb_dev; // 全局USB设备实例
 
-void VisionSetFlag(Enemy_Color_e enemy_color, Work_Mode_e work_mode, Bullet_Speed_e bullet_speed)
-{
-    send_data.enemy_color = enemy_color;
-    send_data.work_mode = work_mode;
-    send_data.bullet_speed = bullet_speed;
-}
-
-void VisionSetAltitude(float yaw, float pitch, float roll)
-{
+void VisionSetAltitude(float yaw, float pitch, float roll) {
     send_data.yaw = yaw;
     send_data.pitch = pitch;
     send_data.roll = roll;
-}
-
-/**
- * @brief 离线回调函数,将在daemon.c中被daemon task调用
- * @attention 由于HAL库的设计问题,串口开启DMA接收之后同时发送有概率出现__HAL_LOCK()导致的死锁,使得无法
- *            进入接收中断.通过daemon判断数据更新,重新调用服务启动函数以解决此问题.
- *
- * @param id vision_usart_instance的地址,此处没用.
- */
-static void VisionOfflineCallback(void *id)
-{
-#ifdef VISION_USE_UART
-    USARTServiceInit(vision_usart_instance);
-#endif // !VISION_USE_UART
 }
 
 #ifdef VISION_USE_UART
@@ -62,6 +53,15 @@ Vision_Recv_s *VisionInit(UART_HandleTypeDef *_handle)
     conf.recv_buff_size = VISION_RECV_SIZE;
     conf.usart_handle = _handle;
     vision_usart_instance = USARTRegister(&conf);
+
+    // 为master process注册daemon,用于判断视觉通信是否离线
+    Daemon_Init_Config_s daemon_conf = {
+        .callback = VisionOfflineCallback, // 离线时调用的回调函数,会重启串口接收
+        .owner_id = vision_usart_instance,
+        .reload_count = 10,
+    };
+    vision_daemon_instance = DaemonRegister(&daemon_conf);
+
     return &recv_data;
 }
 
@@ -82,6 +82,7 @@ void VisionSend()
     flag_register = 30 << 8 | 0b00000001;
     // 将数据转化为seasky协议的数据包
     get_protocol_send_data(0x02, flag_register, &send_data.yaw, 3, send_buff, &tx_len);
+    USARTSend(vision_usart_instance, send_buff, tx_len, USART_TRANSFER_DMA); // 和视觉通信使用IT,防止和接收使用的DMA冲突
     // 此处为HAL设计的缺陷,DMASTOP会停止发送和接收,导致再也无法进入接收中断.
     // 也可在发送完成中断中重新启动DMA接收,但较为复杂.因此,此处使用IT发送.
     // 若使用了daemon,则也可以使用DMA发送.
@@ -91,37 +92,25 @@ void VisionSend()
 
 #ifdef VISION_USE_VCP
 
-// #include "bsp_usb.h"
 static uint8_t *vis_recv_buff;
 
-static void DecodeVision(uint16_t recv_len)
-{
-    uint16_t flag_register;
-    get_protocol_info(vis_recv_buff, &flag_register, (uint8_t *)&recv_data.pitch);
-    // TODO: code to resolve flag_register;
+static void DecodeVision(void) {
+    get_protocol_info(vis_recv_buff, (uint8_t *) &recv_data);
 }
 
 /* 视觉通信初始化 */
-
-Vision_Recv_s *VisionInit(UART_HandleTypeDef *_handle)
-{
-//    UNUSED(_handle); // 仅为了消除警告
-//    USB_Init_Config_s conf = {.rx_cbk = DecodeVision};
-//    vis_recv_buff = USBInit(conf);
-
+Vision_Recv_s *VisionInit(void) {
+    g_usb_dev.rx_callback = DecodeVision;
+    vis_recv_buff = g_usb_dev.rx_buffer;
     return &recv_data;
 }
 
-void VisionSend()
-{
-//    static uint16_t flag_register;
-//    static uint8_t send_buff[VISION_SEND_SIZE];
-//    static uint16_t tx_len;
-//    // TODO: code to set flag_register
-//    flag_register = 30 << 8 | 0b00000001;
-//    // 将数据转化为seasky协议的数据包
-//    get_protocol_send_data(0x02, flag_register, &send_data.yaw, 3, send_buff, &tx_len);
-//    USBTransmit(send_buff, tx_len);
+void VisionSend(void) {
+    static uint16_t tx_len;
+    // 将数据转化为seasky协议的数据包
+    get_protocol_send_data((float *) &send_data, send_buff, &tx_len);
+    bsp_usb_transmit(send_buff, tx_len);
+    memset(send_buff, 0, sizeof(send_buff));
 }
 
 #endif // VISION_USE_VCP

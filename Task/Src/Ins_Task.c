@@ -8,6 +8,7 @@
 #include "usb_device.h"
 #include "cmsis_os.h"
 #include "INS.h"
+#include "TMC.h"
 #include "HC_SR04.h"
 
 extern INS_t *Gimbal_IMU_Data; ///< 云台IMU数据

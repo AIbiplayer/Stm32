@@ -14,8 +14,6 @@
 #include "DJI_Motor.h"
 #include "TMC.h"
 
-#ifdef MCU_GIMBAL
-
 static void Shoot_Init(void);
 
 static void Shoot_Status_Serve(void);
@@ -34,14 +32,18 @@ static uint8_t Shoot_Relieve_Flag = 0;
  * @brief 射击FreeRTOS任务
  */
 void ShootTask(void const *argument) {
+#ifdef MCU_GIMBAL
     taskENTER_CRITICAL();
     Shoot_Init();
     taskEXIT_CRITICAL();
+#endif
     for (;;) {
+#ifdef MCU_GIMBAL
         SubGetMessage(shoot_sub, &shoot_cmd_recv);
         Shoot_Status_Serve();
         PubPushMessage(shoot_pub, &shoot_feedback_data);
         osDelay(1);
+#endif
     }
 }
 
@@ -135,11 +137,11 @@ static void Shoot_Status_Serve(void) {
     DJI_MotorEnable(Friction_R);
     DJI_MotorEnable(Load_bullet);
 
-    // 摩擦轮控制
+    // 摩擦轮控制,单位m/s
     switch (shoot_cmd_recv.friction_mode) {
         case FRICTION_ON:
-            DJI_MotorSetTarget(Friction_L, 6000);
-            DJI_MotorSetTarget(Friction_R, 6000);
+            DJI_MotorSetTarget(Friction_L, 10 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);
+            DJI_MotorSetTarget(Friction_R, 10 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);
             break;
         case FRICTION_OFF:
             DJI_MotorSetTarget(Friction_L, 0);
@@ -154,13 +156,14 @@ static void Shoot_Status_Serve(void) {
         ? (Load_bullet->Measure.Block_Flag = 1, Load_bullet->Measure.Block_CNT = 10)
         : (Load_bullet->Measure.Block_Flag = 0);
 
+    // 堵转检测与保护
     loader_mode_e previous_mode = shoot_cmd_recv.load_mode;
     shoot_cmd_recv.load_mode = Load_bullet->Measure.Block_Flag ? LOAD_REVERSE : shoot_cmd_recv.load_mode;
-
     if (previous_mode != LOAD_REVERSE && shoot_cmd_recv.load_mode == LOAD_REVERSE) {
         Shoot_Relieve_Flag = 1;
         Shoot_Relieve_Time = DWT_GetTimeline_ms();
     }
+    // 反转保护时间到后恢复原来模式,为500ms
     Shoot_Relieve_Flag
         ? DWT_GetTimeline_ms() - Shoot_Relieve_Time > 500
               ? (Shoot_Relieve_Flag = 0)
@@ -173,23 +176,26 @@ static void Shoot_Status_Serve(void) {
             DJI_MotorSetTarget(Load_bullet, 0);
             Shoot_One_Bullet_Flag = 0;
             break;
-        case LOAD_1_BULLET:
+        case LOAD_1_BULLET: // 单发控制，打一发子弹后停止而不是间隔打
             DJI_MotorChangeLoop(Load_bullet, ANGLE_SPEED_CONTROL);
             Shoot_One_Bullet_Flag = Shoot_One_Bullet_Flag == 2 ? 2 : 1;
             if (Shoot_One_Bullet_Flag == 1) {
-                DJI_MotorSetTarget(Load_bullet, Load_bullet->Measure.Total_Angle + ONE_BULLET_DELTA_ANGLE * 90);
+                DJI_MotorSetTarget(Load_bullet,
+                                   Load_bullet->Measure.Total_Angle + ONE_BULLET_DELTA_ANGLE * REDUCTION_RATIO_LOADER *
+                                   REDUCTION_SHOOT);
                 Shoot_One_Bullet_Flag = 2;
             }
             break;
+        // 连发控制，单位Hz
         case LOAD_BURSTFIRE:
             DJI_MotorChangeLoop(Load_bullet, SPEED_CONTROL);
-            DJI_MotorSetTarget(Load_bullet, 5000);
+            DJI_MotorSetTarget(Load_bullet,
+                               15 * REDUCTION_RATIO_LOADER * REDUCTION_SHOOT * RADS_2_RPM / NUM_PER_CIRCLE);
             break;
+        // 反转控制,单位rpm
         case LOAD_REVERSE:
             DJI_MotorChangeLoop(Load_bullet, SPEED_CONTROL);
-            DJI_MotorSetTarget(Load_bullet, -7000);
+            DJI_MotorSetTarget(Load_bullet, -8000);
             break;
     }
 }
-
-#endif

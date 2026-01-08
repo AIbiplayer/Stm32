@@ -8,7 +8,6 @@
 #ifndef TMC_H
 #define TMC_H
 
-#include "main.h"
 #include "robot_def.h"
 
 #define MCU_GIMBAL   // 分别定义云台板和底盘板
@@ -31,8 +30,8 @@ typedef struct //@todo 后续补充底盘反馈数据
     Chassis_Ctrl_Cmd_s Chassis_Cmd; ///< 底盘控制命令
 } TMC_To_Chassis_s; ///< 从云台发送到底盘的控制数据结构体
 
-typedef struct
-{
+typedef struct {
+    float distance; ///< 超声波测量值
 } TMC_To_Gimbal_s; ///< 从底盘发送到云台的控制数据结构体
 #pragma pack()
 
