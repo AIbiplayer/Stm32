@@ -14,6 +14,10 @@
 /* 机器人重要参数定义,注意根据不同机器人进行修改,浮点数需要以.0或f结尾,无符号以u结尾 */
 #define PI               3.14159265358979f
 
+// 超声波测距
+#define MIN_DISTANCE 10.0f // 最小测距距离,单位cm
+#define MAX_DISTANCE 20.0f // 最大测距距离,单位cm
+
 // 云台参数
 #define YAW_ALIGN_ANGLE (YAW_CHASSIS_ALIGN_ECD * ECD_ANGLE_COEF_DJI) // 对齐时的角度,0-360
 #define YAW_CHASSIS_ALIGN_ECD 2078  // 云台和底盘对齐指向相同方向时的电机编码器值,若对云台有机械改动需要修改
@@ -37,6 +41,7 @@
 #define RADS_2_RPM 9.54929658551f      // 弧度每秒转化为转每分钟的系数
 #define REDUCTION_RATIO_WHEEL 19.0f // 3508电机减速比,因为编码器量测的是转子的速度而不是输出轴的速度故需进行转换，这也是M3519减速比
 #define REDUCTION_TRACK 2.9f     // 履带减速比
+#define MAX_ANGLE_TRACK 170.0f        // 履带最大转动角度
 
 #define GYRO2GIMBAL_DIR_YAW 1   // 陀螺仪数据相较于云台的yaw的方向,1为相同,-1为相反
 #define GYRO2GIMBAL_DIR_PITCH -1 // 陀螺仪数据相较于云台的pitch的方向,1为相同,-1为相反

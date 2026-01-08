@@ -196,125 +196,126 @@ static void Emergency_Stop(void) {
  * @brief 键盘控制指令解析
  */
 static void Keyboard_Cmd(void) {
-    static float max_speed;
+    static float max_speed = 1000.0f; //默认最大速度3m/s
     //WASD方向平移
     if (RC_data[TEMP].key[KEY_PRESS].w)
-        chassis_cmd_send.vy = (chassis_cmd_send.vy < max_speed) ? (chassis_cmd_send.vy += 2.0f) : max_speed;
+        chassis_cmd_send.vy = (chassis_cmd_send.vy < max_speed) ? (chassis_cmd_send.vy += 10.0f) : max_speed;
     else if (RC_data[TEMP].key[KEY_PRESS].s)
-        chassis_cmd_send.vy = (chassis_cmd_send.vy > -max_speed) ? (chassis_cmd_send.vy -= 2.0f) : -max_speed;
+        chassis_cmd_send.vy = (chassis_cmd_send.vy > -max_speed) ? (chassis_cmd_send.vy -= 10.0f) : -max_speed;
     else chassis_cmd_send.vy = 0;
 
     if (RC_data[TEMP].key[KEY_PRESS].d)
-        chassis_cmd_send.vx = (chassis_cmd_send.vx > max_speed) ? (chassis_cmd_send.vx += 2.0f) : max_speed;
+        chassis_cmd_send.vx = (chassis_cmd_send.vx > max_speed) ? (chassis_cmd_send.vx += 10.0f) : max_speed;
     else if (RC_data[TEMP].key[KEY_PRESS].a)
-        chassis_cmd_send.vx = (chassis_cmd_send.vx > -max_speed) ? (chassis_cmd_send.vx -= 2.0f) : -max_speed;
+        chassis_cmd_send.vx = (chassis_cmd_send.vx > -max_speed) ? (chassis_cmd_send.vx -= 10.0f) : -max_speed;
     else
         chassis_cmd_send.vx = 0;
 
-    if (RC_data[TEMP].key[KEY_PRESS].shift) {
-        chassis_cmd_send.chassis_mode = CHASSIS_ROTATE;
-    } else {
-        chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
+    switch (RC_data[TEMP].key_count[KEY_PRESS][Key_C] % 3) //C键切换履带模式
+    {
+        case 0: // 履带收回
+            chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
+            chassis_cmd_send.track = TRACK_NONE;
+            break;
+        case 1: // 履带伸长
+            chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
+            chassis_cmd_send.track = TRACK_EXTEND;
+            break;
+        case 2: // 履带上台阶模式
+            chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
+            chassis_cmd_send.track = TRACK_UP;
+            break;
     }
-    //	switch(RC_data[TEMP].key_count[KEY_PRESS][Key_C]%3)//C键切换底盘模式
-    //	{
-    //		case 0:
-    //			chassis_cmd_send.chassis_mode=CHASSIS_INDEPENDENCE;
-    //			chassis_cmd_send.wz = RC_data[TEMP].key[KEY_PRESS].q *15.0f  - RC_data[TEMP].key[KEY_PRESS].e * 15.0f;//QE左右旋
-    //			break;
-    //		case 1:
-    //			chassis_cmd_send.chassis_mode=CHASSIS_FOLLOW_GIMBAL_YAW;
-    //			break;
-    //		default:
-    //			chassis_cmd_send.chassis_mode=CHASSIS_ROTATE;
-    //	}
+    // 按住Shift键底盘小陀螺 todo 后续增加与履带协同的小陀螺
+    if (RC_data[TEMP].key[KEY_PRESS].shift)
+        chassis_cmd_send.chassis_mode = CHASSIS_ROTATE;
+
     if (RC_data[TEMP].mouse.press_r) //长按鼠标右键进入自瞄模式
     {
         gimbal_cmd_send.gimbal_mode = GIMBAL_VISION; //只做头部跟随
-        if (pTemp != vision->theta_pitch) {
-            pTemp = vision->theta_pitch;
-            gimbal_cmd_send.pitch = gimba_IMU_data->Pitch - vision->theta_pitch;
-        }
-        if (yTemp != vision->theta_yaw) {
-            yTemp = vision->theta_yaw;
-            gimbal_cmd_send.yaw = gimba_IMU_data->YawTotalAngle - vision->theta_yaw;
-        }
-    } else //不按右键云台自由移动
-    {
+        gimbal_cmd_send.yaw = vision_recv_data->yaw;
+        gimbal_cmd_send.pitch = vision_recv_data->pitch;
+        gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, 20.0f, -35.0f);
+    }
+    //不按右键云台自由移动
+    else {
         gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
         gimbal_cmd_send.yaw += (float) RC_data[TEMP].mouse.x / 660 * 2.4f; //3.5
         gimbal_cmd_send.pitch += -(float) RC_data[TEMP].mouse.y / 660 * 1.3f; //-2.5
+        gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, 20.0f, -35.0f);
     }
-    //	switch(RC_data[TEMP].key_count[KEY_PRESS][Key_R]%2)//R键切换打弹模式 连\单
-    //	{
-    //		case 0:
-    //			shoot_cmd_send.load_mode=LOAD_BURSTFIRE;
-    //		break;
-    //		default:
-    //			shoot_cmd_send.load_mode=LOAD_1_BULLET;
-    //		break;
-    //	}
     switch (RC_data[TEMP].key_count[KEY_PRESS][Key_F] % 2) // F键开关摩擦轮
     {
         case 0:
             shoot_cmd_send.friction_mode = FRICTION_OFF;
-            shoot_cmd_send.shoot_mode = SHOOT_OFF;
             break;
         default:
             shoot_cmd_send.friction_mode = FRICTION_ON;
-            shoot_cmd_send.shoot_mode = SHOOT_ON;
-            break;
-    }
-    switch (RC_data[TEMP].key_count[KEY_PRESS][Key_X] % 2) //唤起UI,UI任务在UITASK
-    {
-        case 0:
-            KEY_X = 0;
-            break;
-        case 1:
-            KEY_X = 1;
             break;
     }
     switch (RC_data[TEMP].key_count[KEY_PRESS][Key_V] % 4) //V键调整速度
     {
         case 0:
-            max_speed = 100.0f;
+            max_speed = 1000.0f;
             break;
         case 1:
-            max_speed = 150.0f;
+            max_speed = 2000.0f;
             break;
         case 2:
-            max_speed = 200.0f;
+            max_speed = 3000.0f;
             break;
         default:
-            max_speed = 250.0f;
+            max_speed = 4000.0f;
     }
-    //	if(RC_data[TEMP].mouse.press_l)//按下按键才开启拨盘
-    //	{
-    //		return;
-    //	}
-    //	else
-    //	{
-    //		shoot_cmd_send.load_mode=LOAD_STOP;//不按关闭
-    //	}
     if (RC_data[TEMP].mouse.press_l) //鼠标左键短按单发，长按连发
     {
-        //		current_time=DWT_GetTimeline_ms();
-        //		if(shoot_cmd_send.load_mode==LOAD_STOP)
-        //		{
-        //			mouse_press_time=current_time;//获取时间
-        //			shoot_cmd_send.load_mode=LOAD_1_BULLET;
-        //
-        //		}
-        //		else if(shoot_cmd_send.load_mode==LOAD_1_BULLET)
-        //		{
-        //			if(current_time-mouse_press_time>=Threshold_time)
-        //			{
-        shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
-        shoot_cmd_send.shoot_rate = 1.9f;
-        //			}
-        //		}
-    } else {
-        shoot_cmd_send.load_mode = LOAD_STOP;
+        const float current_time = DWT_GetTimeline_ms();
+        static float mouse_press_time = 0.0f;
+        if (shoot_cmd_send.load_mode == LOAD_STOP) {
+            mouse_press_time = current_time; //获取时间
+            shoot_cmd_send.load_mode = LOAD_1_BULLET;
+        } // 单发模式后连续按下一段时间进入连发模式
+        else if (shoot_cmd_send.load_mode == LOAD_1_BULLET) {
+            if (current_time - mouse_press_time >= 500.0f) {
+                shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
+                shoot_cmd_send.shoot_rate = 10.0f; // 单位Hz
+            }
+            // 短按则继续单发
+            else
+                shoot_cmd_send.load_mode = LOAD_STOP;
+        }
+    }
+
+    // 履带控制,和遥控器稍微不同
+    static uint8_t up_count, down_count, flag = 0; //高度差计数，flag履带状态标志
+    if (flag == 2)
+        chassis_cmd_send.track = TRACK_NONE;
+    switch (chassis_cmd_send.track) {
+        case TRACK_UP:
+            up_count = HC_Measure > MAX_DISTANCE && flag == 0 ? up_count + 1 : 0;
+            down_count = HC_Measure < MIN_DISTANCE && flag == 1 ? down_count + 1 : 0;
+            flag = up_count > 50 ? 1 : flag;
+            flag = down_count > 50 ? 2 : flag;
+            chassis_cmd_send.a_track_head += RC_data[TEMP].key[KEY_PRESS].q ? 0.3f : 0.0f;
+            chassis_cmd_send.a_track_head -= RC_data[TEMP].key[KEY_PRESS].e ? 0.3f : 0.0f;
+            chassis_cmd_send.a_track_head = Angle_limit(chassis_cmd_send.a_track_head, MAX_ANGLE_TRACK, 0.0f);
+            chassis_cmd_send.a_track_back = 105 + PID_Calculate(&UPPID, 0.0f,
+                                                                gimbal_fetch_data.gimbal_imu_data.Roll);
+            chassis_cmd_send.a_track_back = Angle_limit(chassis_cmd_send.a_track_back, MAX_ANGLE_TRACK, 105.0f);
+            break;
+        case TRACK_EXTEND:
+            chassis_cmd_send.a_track_head = MAX_ANGLE_TRACK;
+            chassis_cmd_send.a_track_back = MAX_ANGLE_TRACK;
+            break;
+        case TRACK_ROTATE:
+            chassis_cmd_send.a_track_head = 0.0f;
+            chassis_cmd_send.a_track_back = 0.0f;
+            // @todo 小陀螺先不写
+            break;
+        case TRACK_NONE:
+            chassis_cmd_send.a_track_head = 0.0f;
+            chassis_cmd_send.a_track_back = 0.0f;
+            break;
     }
 }
 
@@ -369,22 +370,23 @@ static void RemoteControl_Cmd(void) {
     }
     if (flag == 2)
         chassis_cmd_send.track = TRACK_NONE;
-    // @todo 履带控制指令，由于遥控器中云台和履带共用右拨杆，目前只能使用一个
+
     switch (chassis_cmd_send.track) {
         case TRACK_UP:
-            up_count = HC_Measure > 20.0f && flag == 0 ? up_count + 1 : 0;
-            down_count = HC_Measure < 10.0f && flag == 1 ? down_count + 1 : 0;
-            flag = up_count > 20 ? 1 : flag;
-            flag = down_count > 20 ? 2 : flag;
+            up_count = HC_Measure > MAX_DISTANCE && flag == 0 ? up_count + 1 : 0;
+            down_count = HC_Measure < MIN_DISTANCE && flag == 1 ? down_count + 1 : 0;
+            flag = up_count > 50 ? 1 : flag;
+            flag = down_count > 50 ? 2 : flag;
 
             chassis_cmd_send.a_track_head += (float) RC_data[TEMP].rc.rocker_r1 * 0.00034f;
-            chassis_cmd_send.a_track_head = Angle_limit(chassis_cmd_send.a_track_head, 170.0f, 0.0f);
-            chassis_cmd_send.a_track_back = 105 + PID_Calculate(&UPPID, 0.0f, gimbal_fetch_data.gimbal_imu_data.Roll);
-            chassis_cmd_send.a_track_back = Angle_limit(chassis_cmd_send.a_track_back, 170.0f, 105.0f);
+            chassis_cmd_send.a_track_head = Angle_limit(chassis_cmd_send.a_track_head, MAX_ANGLE_TRACK, 0.0f);
+            chassis_cmd_send.a_track_back = 105 + PID_Calculate(&UPPID, 0.0f,
+                                                                gimbal_fetch_data.gimbal_imu_data.Roll);
+            chassis_cmd_send.a_track_back = Angle_limit(chassis_cmd_send.a_track_back, MAX_ANGLE_TRACK, 105.0f);
             break;
         case TRACK_EXTEND:
-            chassis_cmd_send.a_track_head = 170.0f;
-            chassis_cmd_send.a_track_back = 170.0f;
+            chassis_cmd_send.a_track_head = MAX_ANGLE_TRACK;
+            chassis_cmd_send.a_track_back = MAX_ANGLE_TRACK;
             break;
         case TRACK_ROTATE:
             chassis_cmd_send.a_track_head = 0.0f;
@@ -409,10 +411,10 @@ static void RemoteControl_Cmd(void) {
         gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, 20.0f, -35.0f);
     }
     // 自由模式,右拨杆控制底盘旋转
-    else if (gimbal_cmd_send.gimbal_mode == GIMBAL_FREE_MODE) {
+    else if (gimbal_cmd_send.gimbal_mode == GIMBAL_FREE_MODE)
         chassis_cmd_send.wz = (float) RC_data[TEMP].rc.rocker_r_ * 0.151f;
-    }
 
+    // 平移速度设置
     chassis_cmd_send.vy = (float) RC_data[TEMP].rc.rocker_l1 * 0.151f * 30.0f; // 最高3m/s
     chassis_cmd_send.chassis_mode == CHASSIS_INDEPENDENCE
         ? (chassis_cmd_send.wz = (float) RC_data[TEMP].rc.rocker_l_ * 0.00151f * 3.0f) // 最高3转/s

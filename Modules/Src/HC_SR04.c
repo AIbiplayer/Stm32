@@ -23,6 +23,7 @@ static float Last_Distance = 0; ///< 上次计算的距离
 void HC_Init(void)
 {
     HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1); // 启动超声波输入捕获
+
 }
 
 /**

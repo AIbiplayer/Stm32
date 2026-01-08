@@ -13,7 +13,7 @@
 #include "message_center.h"
 #include "TMC.h"
 
-INS_t *Gimbal_IMU_Data; ///< 云台IMU数据
+CCMRAM INS_t *Gimbal_IMU_Data; ///< 云台IMU数据
 CCMRAM DJI_Motor_Instance *Gimbal_Yaw; ///<Yaw轴电机
 CCMRAM DJI_Motor_Instance *Gimbal_Pitch; ///<Pitch轴电机
 
@@ -150,13 +150,11 @@ static void Gimbal_Status_Serve(void) {
             PID_Clean_I(&Gimbal_Pitch->Control_Setting.Angle_PID);
             PID_Clean_I(&Gimbal_Pitch->Control_Setting.Speed_PID);
             break;
-        case GIMBAL_GYRO_MODE:
+        default:
             DJI_MotorEnable(Gimbal_Yaw);
             DJI_MotorEnable(Gimbal_Pitch);
             DJI_MotorSetTarget(Gimbal_Yaw, gimbal_cmd_recv.yaw);
             DJI_MotorSetTarget(Gimbal_Pitch, gimbal_cmd_recv.pitch);
-            break;
-        default:
             break;
     }
     gimbal_feedback_data.gimbal_imu_data = *Gimbal_IMU_Data;

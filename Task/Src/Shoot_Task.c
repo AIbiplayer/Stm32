@@ -149,6 +149,7 @@ static void Shoot_Status_Serve(void) {
             break;
     }
 
+    // 堵转检测
     abs(Load_bullet->Measure.Speed < 150) && abs(Load_bullet->Measure.Current > 7000)
         ? (Load_bullet->Measure.Block_CNT++)
         : (Load_bullet->Measure.Block_CNT = 0);
@@ -190,7 +191,7 @@ static void Shoot_Status_Serve(void) {
         case LOAD_BURSTFIRE:
             DJI_MotorChangeLoop(Load_bullet, SPEED_CONTROL);
             DJI_MotorSetTarget(Load_bullet,
-                               15 * REDUCTION_RATIO_LOADER * REDUCTION_SHOOT * RADS_2_RPM / NUM_PER_CIRCLE);
+                               shoot_cmd_recv.shoot_rate * REDUCTION_RATIO_LOADER * REDUCTION_SHOOT * RADS_2_RPM / NUM_PER_CIRCLE);
             break;
         // 反转控制,单位rpm
         case LOAD_REVERSE:

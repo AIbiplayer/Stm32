@@ -17,17 +17,17 @@
 #include "TMC.h"
 #include "can_comm.h"
 
-#ifndef MCU_CHASSIS
+#ifdef MCU_CHASSIS
 
 static float chassis_vx, chassis_vy, chassis_vw; // 将云台系的速度投影到底盘
 static float Mec_V1, Mec_V2, Mec_V3, Mec_V4; // 四轮速度
 CCMRAM static DJI_Motor_Instance *Mec_Wheel[4];
 CCMRAM static DM_Motor_Instance *Track_Wheel[4];
-static Chassis_Ctrl_Cmd_s chassis_cmd_recv; // 底盘接收到的控制命令
-static Chassis_Upload_Data_s chassis_feedback_data; // 底盘回传的反馈数据
-static PID_Typedef WZ_ROTATE_PID, WZ_FOLLOW_PID;
+CCMRAM static Chassis_Ctrl_Cmd_s chassis_cmd_recv; // 底盘接收到的控制命令
+CCMRAM static Chassis_Upload_Data_s chassis_feedback_data; // 底盘回传的反馈数据
+CCMRAM static PID_Typedef WZ_ROTATE_PID, WZ_FOLLOW_PID;
 
-static TMC_To_Chassis_s *Chassis_Data; // 底盘与云台数据结构体实例
+CCMRAM static TMC_To_Chassis_s *Chassis_Data; // 底盘与云台数据结构体实例
 Track_Mode_e Chassis_Track_Mode; ///< 底盘履带模式
 extern CANCommInstance *CANCOM;
 
@@ -145,10 +145,12 @@ static void Chassis_Init(void) {
     DM_MotorSaveZero(Track_Wheel[2]);
     DM_MotorSaveZero(Track_Wheel[3]);
 
-    PID_Param(&WZ_ROTATE_PID, 0.0f, 50.0f, 0, Integral_Limit | Derivative_On_Measurement,
-              1.0f, 0.0f, 50, 2500);
+    PID_Param(&WZ_ROTATE_PID, 0.0f, 1.0f, 0, Integral_Limit | Derivative_On_Measurement,
+              1.0f, 0.0f, 3, 3);
     PID_Param(&WZ_FOLLOW_PID, 2.7f, 0.0f, 0.1f, Integral_Limit | Derivative_On_Measurement | OutputFilter,
               0.9f, 0.0f, 20, 200);
+
+    Chassis_Data = (TMC_To_Chassis_s *) CANCommGet(CANCOM);
 }
 
 /**
@@ -156,7 +158,6 @@ static void Chassis_Init(void) {
  * @note 底盘运动学模型，这里包含底盘与云台的角度计算等
  */
 static void Speed_Calculate(void) {
-    Chassis_Data = (TMC_To_Chassis_s *) CANCommGet(CANCOM);
     if (Chassis_Data != NULL)
         chassis_cmd_recv = Chassis_Data->Chassis_Cmd;
 
@@ -179,7 +180,7 @@ static void Speed_Calculate(void) {
         }
         case CHASSIS_ROTATE: {
             PID_Clean_I(&WZ_FOLLOW_PID);
-            chassis_vw = PID_Calculate(&WZ_ROTATE_PID, 0.1f, 0);
+            chassis_vw = PID_Calculate(&WZ_ROTATE_PID, 0.001f, 0);
             chassis_vx = chassis_cmd_recv.vx * cos_theta - chassis_cmd_recv.vy * sin_theta;
             chassis_vy = chassis_cmd_recv.vx * sin_theta + chassis_cmd_recv.vy * cos_theta;
             break;
