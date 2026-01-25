@@ -9,7 +9,6 @@
 #include "usart.h"
 #include "string.h"
 #include "Chassis_Task.h"
-#include "stdbool.h"
 #include "Debug_Tool.h"
 
 #define FRAME_ROCKER  0x31  // 摇杆模式
@@ -21,25 +20,26 @@ char* Buffer_Ptr = Bluetooth_Receive_Buffer[0]; // 指向当前处理的缓冲�
 CCMRAM_DATA Bluetooth_Data_s BL_Instance = {0}; // 蓝牙数据实例
 
 extern Chassis_Instance_s CH_Instance;
+extern Camera_Data_s Cam_Instance;
 
 /**
  * @brief 解析蓝牙接收的数据
  * @note 对三种模式分别进行解析
  * @todo 返回的状态或许可以用上
  */
-bool Bluetooth_Parse(const uint8_t len)
+void Bluetooth_Parse(const uint8_t len)
 {
     static uint8_t buf[RX_BUFF_SIZE] = {0}; // 临时存储接收数据
     memcpy(buf, Buffer_Ptr, RX_BUFF_SIZE);
 
     if (buf[0] != 0xAA || buf[1] != 0x55) // 数据包头错误
-        return false;
+        return;
 
     uint8_t checksum = 0;
     for (uint8_t i = 0; i < len - 1; i++) // 计算校验和，最后一个字节为校验和
         checksum += buf[i];
     if (checksum != buf[len - 1])
-        return false;
+        return;
 
     BL_Instance.X_L = buf[5]; //@note 重力模式会重新覆盖
     BL_Instance.Y_L = -buf[4];
@@ -70,9 +70,9 @@ bool Bluetooth_Parse(const uint8_t len)
             BL_Instance.Rocker_Handle_Data.X_R = buf[7];
             BL_Instance.Rocker_Handle_Data.Y_R = -buf[6];
             BL_Instance.Dif_Data.Handle_Data.Y = (buf[8] >> 0) & 1;
-            CH_Instance.Vision_Mode = BL_Instance.Dif_Data.Handle_Data.Y && !BL_Instance.Dif_Data.Handle_Data.Y_Last
-                                          ? (CH_Instance.Vision_Mode + 1) % 4
-                                          : CH_Instance.Vision_Mode;
+            Cam_Instance.Mode = BL_Instance.Dif_Data.Handle_Data.Y && !BL_Instance.Dif_Data.Handle_Data.Y_Last
+                                    ? (Cam_Instance.Mode + 1) % 4
+                                    : Cam_Instance.Mode;
             BL_Instance.Dif_Data.Handle_Data.Y_Last = BL_Instance.Dif_Data.Handle_Data.Y;
             //按键1
             BL_Instance.Dif_Data.Handle_Data.Up = (buf[8] >> 7) & 1;
@@ -108,26 +108,7 @@ bool Bluetooth_Parse(const uint8_t len)
     default: break;
     }
     memset(Buffer_Ptr, 0, sizeof(Bluetooth_Receive_Buffer[0]));
-    return true;
 }
 
-/**
- * @brief 串口初始化
- * @todo 蓝牙启动时底盘速度归零
- */
-void Bluetooth_Start(void)
-{
-    HAL_UARTEx_ReceiveToIdle_DMA(&UART_BLUETOOTH, (uint8_t*)Buffer_Ptr, sizeof(Bluetooth_Receive_Buffer[0]));
-    __HAL_DMA_DISABLE_IT(UART_BLUETOOTH.hdmarx, DMA_IT_HT);
-}
 
-/**
- * @brief 停止蓝牙模块
- * @note 该函数停止UART的DMA接收和中断
- * @todo 蓝牙停止时自动切换至PS2模式，同时底盘速度归零
- */
-void Bluetooth_Stop(void)
-{
-    HAL_UART_DMAStop(&UART_BLUETOOTH);
-    __HAL_UART_DISABLE_IT(&UART_BLUETOOTH, UART_IT_IDLE);
-}
+

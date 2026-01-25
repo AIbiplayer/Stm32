@@ -26,7 +26,7 @@ typedef struct
 {
     float Speed; //目标速度
     PID_Typedef PID; //电机速度PID结构体
-    float PID_Output; //PID输出
+    float Pulse_Output; // 电机脉冲输出
     TIM_HandleTypeDef* TIMx; //电机对应的定时器
     float (*Motor_GetSpeed)(TIM_HandleTypeDef*); //电机速度
 } Motor_Instance_s;

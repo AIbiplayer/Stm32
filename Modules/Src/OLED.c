@@ -17,7 +17,7 @@
  */
 void Delay(void)
 {
-    for (uint8_t i = 0; i < 5; i++);
+    for (uint8_t i = 0; i < 1; i++);
 }
 
 /**

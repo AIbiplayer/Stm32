@@ -28,9 +28,8 @@ typedef struct // 移动结构体
 
 typedef struct // 底盘结构体，这里都是输入
 {
-    Chassis_Status_e Status : 2; // 底盘模式
-    Control_Mode_e Control_Mode : 2; // 控制模式
-    Vision_Mode_e Vision_Mode : 2; // 视觉模式
+    Chassis_Status_e Status : 4; // 底盘模式
+    Control_Mode_e Control_Mode : 4; // 控制模式
     Chassis_Move_s Move; // 移动结构体
     int8_t Speed_Set[4]; // 四轮或三轮速度
 } Chassis_Instance_s;

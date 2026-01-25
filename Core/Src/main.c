@@ -32,6 +32,7 @@
 #include "Chassis_Task.h"
 #include "ax_delay.h"
 #include "ax_ps2.h"
+#include "Gimbal_Task.h"
 #include "Cmd_Task.h"
 #include "MG310.h"
 #include "Mpu6050.h"
@@ -119,7 +120,7 @@ int main(void)
     AX_DELAY_Init();
     MPU6050_Init();
     OLED_Init();
-    Bluetooth_Start();
+    Uart_Init();
 
   /* USER CODE END 2 */
 
@@ -129,6 +130,7 @@ int main(void)
     {
         Cmd_Task();
         Chassis_Task();
+        Gimbal_Task();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

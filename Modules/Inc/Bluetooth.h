@@ -89,8 +89,6 @@ typedef struct
     Rocker_Handle_Data_s Rocker_Handle_Data; // 摇杆/手柄共有数据
 } Bluetooth_Data_s;
 
-void Bluetooth_Stop(void);
-void Bluetooth_Start(void);
-bool Bluetooth_Parse(const uint8_t len);
+void Bluetooth_Parse(const uint8_t len);
 
 #endif /* INC_Bluetooth_H_ */

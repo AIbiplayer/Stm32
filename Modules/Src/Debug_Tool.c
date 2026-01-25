@@ -19,6 +19,7 @@
 extern Bluetooth_Data_s BL_Instance; // 蓝牙数据
 extern JOYSTICK_TypeDef JoystickStruct; // PS2手柄数据
 extern Chassis_Instance_s CH_Instance; // 底盘数据
+extern Camera_Data_s Cam_Instance; // 摄像头数据
 
 /**
  * @brief 通过蓝牙调试数据输出
@@ -114,7 +115,20 @@ void Debug_Chassis(void)
                 CH_Instance.Move.w,
                 (int8_t)CH_Instance.Status,
                 (int8_t)CH_Instance.Control_Mode,
-                (int8_t)CH_Instance.Vision_Mode
+                (int8_t)Cam_Instance.Mode
+    );
+}
+
+/**
+ * @brief 通过UART调试摄像头数据输出
+ */
+void Debug_Camera(void)
+{
+    Uart_printf(&UART_DEBUG, "%d,%d,%d,%d\r\n",
+                (int8_t)Cam_Instance.Mode,
+                (int8_t)Cam_Instance.Target_Found,
+                Cam_Instance.Error_X,
+                Cam_Instance.Error_Y
     );
 }
 

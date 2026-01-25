@@ -20,8 +20,7 @@ CCMRAM_DATA PID_Typedef Motor_PID;
  * @note 通道一个一个开，防止有BUG
  * @todo 增加电机控制回调
  */
-void MG310_Init(void)
-{
+void MG310_Init(void) {
     //PWM通道输出使能
     HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
     HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
@@ -50,9 +49,7 @@ void MG310_Init(void)
     MG310[2].TIMx = &ENCODERC_TIM;
     MG310[3].TIMx = &ENCODERD_TIM;
 
-
-    for (uint8_t i = 0; i < 4; i++)
-    {
+    for (uint8_t i = 0; i < 4; i++) {
         MG310[i].PID = Motor_PID;
         MG310[i].Motor_GetSpeed = GetSpeed;
     }
@@ -64,8 +61,7 @@ void MG310_Init(void)
  * @note TIM1的频率为168Mhz，最终范围为2400~12000
  * @return 定时器比较值
  */
-CCMRAM_CODE float Output_To_Tim1(float Output)
-{
+float Output_To_Tim1(float Output) {
     float Tim1_Compare = Output * 72.0f + 4800.0f * fabsf(Output) / Output;
     if (Tim1_Compare > 15000.0f)
         Tim1_Compare = 15000.0f;
@@ -80,8 +76,7 @@ CCMRAM_CODE float Output_To_Tim1(float Output)
  * @note TIM2的频率为168Mhz，最终范围为2400~6000
  * @return 定时器比较值
  */
-CCMRAM_CODE float Output_To_Tim2(float Output)
-{
+float Output_To_Tim2(float Output) {
     float Tim2_Compare = Output * 36.0f + 2400.0f * fabsf(Output) / Output;
     if (Tim2_Compare > 7500.0f)
         Tim2_Compare = 7500.0f;
@@ -95,9 +90,8 @@ CCMRAM_CODE float Output_To_Tim2(float Output)
  * @param htim 电机对应的定时器句柄
  * @return 电机速度值
  */
-float GetSpeed(TIM_HandleTypeDef* htim)
-{
-    float speed = (float)__HAL_TIM_GET_COUNTER(htim);
+float GetSpeed(TIM_HandleTypeDef *htim) {
+    float speed = (float) __HAL_TIM_GET_COUNTER(htim);
     __HAL_TIM_SET_COUNTER(htim, 0);
     speed = speed > 32768 ? speed - 65535 : speed; // 处理计数器溢出
     return speed;
@@ -107,32 +101,31 @@ float GetSpeed(TIM_HandleTypeDef* htim)
  * @brief 电机驱动函数
  * @note 此函数循环调用，进行电机速度控制
  */
-CCMRAM_CODE void MG310_Drive(void)
-{
+void MG310_Drive(void) {
     for (uint8_t i = 0; i < 4; i++)
-        MG310[i].PID_Output = i < 2 ? Output_To_Tim2(MG310[i].PID_Output) : Output_To_Tim1(MG310[i].PID_Output);
-    // 电机A输出
-    MG310[0].PID_Output > 0
-        ? (__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, (int16_t)MG310[0].PID_Output),
-            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 0))
-        : (__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, (int16_t)-MG310[0].PID_Output),
-            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 0));
+        MG310[i].Pulse_Output = i < 2 ? Output_To_Tim2(MG310[i].PID.Output) : Output_To_Tim1(MG310[i].PID.Output);
+    //    电机A输出
+    MG310[0].Pulse_Output > 0
+        ? (__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, (int16_t)MG310[0].Pulse_Output),
+           __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 0))
+        : (__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, (int16_t)-MG310[0].Pulse_Output),
+           __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 0));
     // 电机B输出
-    MG310[1].PID_Output > 0
-        ? (__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, (int16_t)MG310[1].PID_Output),
-            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, 0))
-        : (__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, (int16_t)-MG310[1].PID_Output),
-            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 0));
+    MG310[1].Pulse_Output > 0
+        ? (__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, (int16_t)MG310[1].Pulse_Output),
+           __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, 0))
+        : (__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, (int16_t)-MG310[1].Pulse_Output),
+           __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 0));
     // 电机C输出
-    MG310[2].PID_Output > 0
-        ? (__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (int16_t)MG310[2].PID_Output),
-            __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, 0))
-        : (__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, (int16_t)-MG310[2].PID_Output),
-            __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0));
+    MG310[2].Pulse_Output > 0
+        ? (__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, (int16_t)MG310[2].Pulse_Output),
+           __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, 0))
+        : (__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, (int16_t)-MG310[2].Pulse_Output),
+           __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0));
     // 电机D输出
-    MG310[3].PID_Output > 0
-        ? (__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (int16_t)MG310[3].PID_Output),
-            __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0))
-        : (__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (int16_t)-MG310[3].PID_Output),
-            __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0));
+    MG310[3].Pulse_Output > 0
+        ? (__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, (int16_t)MG310[3].Pulse_Output),
+           __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0))
+        : (__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (int16_t)-MG310[3].Pulse_Output),
+           __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0));
 }
