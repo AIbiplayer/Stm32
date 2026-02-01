@@ -17,7 +17,7 @@ extern CANCommInstance *CANCOM; // 底盘或云台的CAN通信实例指针
 
 CCMRAM float HC_Measure = 0.0f; ///< 超声波测量值
 static uint8_t Count = 0; ///< 计数器
-static TMC_To_Gimbal_s *Gimbal_Data; // 云台与底盘数据结构体实例
+TMC_To_Gimbal_s *Gimbal_Rec; // 云台与底盘数据结构体实例
 
 /**
  * @brief 陀螺仪任务
@@ -25,11 +25,10 @@ static TMC_To_Gimbal_s *Gimbal_Data; // 云台与底盘数据结构体实例
  */
 void INSTask(void const *argument) {
     taskENTER_CRITICAL();
-
     Gimbal_IMU_Data = INS_Init();
     HC_Init();
     LED_Green_Up;
-    Gimbal_Data = (TMC_To_Gimbal_s *) CANCommGet(CANCOM);
+    Gimbal_Rec = (TMC_To_Gimbal_s *) CANCommGet(CANCOM);
     taskEXIT_CRITICAL();
     for (;;) {
         INS_Task();
@@ -39,8 +38,8 @@ void INSTask(void const *argument) {
         Count == 1 ? HC_Send_Trig() : Count > 20 ? (HC_Measure = HC_Get_Measure(), Count = 0) : 0;
         Count++;
 #elifdef MCU_GIMBAL
-        if (Gimbal_Data != NULL)
-            HC_Measure = Gimbal_Data->distance;
+        if (Gimbal_Rec != NULL)
+            HC_Measure = Gimbal_Rec->distance;
 #endif
     }
 }

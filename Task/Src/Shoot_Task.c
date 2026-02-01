@@ -140,8 +140,8 @@ static void Shoot_Status_Serve(void) {
     // 摩擦轮控制,单位m/s
     switch (shoot_cmd_recv.friction_mode) {
         case FRICTION_ON:
-            DJI_MotorSetTarget(Friction_L, 10 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);
-            DJI_MotorSetTarget(Friction_R, 10 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);
+            DJI_MotorSetTarget(Friction_L, 15 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);
+            DJI_MotorSetTarget(Friction_R, 15 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);
             break;
         case FRICTION_OFF:
             DJI_MotorSetTarget(Friction_L, 0);

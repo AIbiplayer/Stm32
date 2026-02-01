@@ -20,6 +20,12 @@
 
 CCMRAM RC_ctrl_t *RC_data; // 遥控器数据,初始化时返回
 CCMRAM CANCommInstance *CANCOM; // 底盘或云台的CAN通信实例指针
+CCMRAM float Timeout = 0.0f; // 遥控器信号丢失计时
+CCMRAM uint8_t Timeout_flag = 0; // 遥控器信号丢失标志
+
+extern INS_t INS;
+extern TMC_To_Gimbal_s *Gimbal_Rec; // 云台与底盘数据结构体实例
+
 
 /* cmd应用包含的模块实例指针和交互信息存储*/
 static Chassis_Ctrl_Cmd_s chassis_cmd_send; // 发送给底盘应用的信息,包括控制信息和UI绘制相关
@@ -37,6 +43,9 @@ static Shoot_Upload_Data_s shoot_fetch_data; // 从发射获取的反馈信息
 
 static TMC_To_Chassis_s Chassis_Data; // 底盘与云台数据结构体实例
 static TMC_To_Gimbal_s Gimbal_Data; // 云台与底盘数据结构体实例
+
+static uint8_t DM_count = 0; // 达妙电机控制计数器
+
 
 #ifdef MCU_CHASSIS // 如果是底盘板
 CCMRAM static CANComm_Init_Config_s TMC_CANComm_Config = {
@@ -87,6 +96,7 @@ void CmdTask(void *argument) {
     DWT_Init(168);
     Robot_Cmd_Init();
     MX_USB_DEVICE_Init();
+    Timeout = DWT_GetTimeline_ms();
     HAL_GPIO_WritePin(GPIOA,GPIO_PIN_12, GPIO_PIN_RESET); //USB DP拉低，重新枚举
     taskEXIT_CRITICAL();
 
@@ -95,6 +105,8 @@ void CmdTask(void *argument) {
         SubGetMessage(gimbal_feed_sub, &gimbal_fetch_data);
         SubGetMessage(shoot_feed_sub, (void *) &shoot_fetch_data);
 
+        Timeout_flag = DWT_GetTimeline_ms() - Timeout > 100.0f ? 1 : 0;
+
         CalcOffsetAngle();
         Robot_Cmd_Serve();
         Chassis_Data.Chassis_Cmd = chassis_cmd_send;
@@ -102,8 +114,15 @@ void CmdTask(void *argument) {
         DJI_Motor_Control();
 
 #ifdef MCU_CHASSIS
-        DM_Motor_Control();
+        DM_count++;
+        DM_count >= 5 ? (DM_Motor_Control(), DM_count = 0) : 0; // 达妙电机控制频率为20ms
+
         Gimbal_Data.distance = HC_Measure;
+        Gimbal_Data.CH_Gyro[0] = (int8_t) INS.Gyro[0];
+        Gimbal_Data.CH_Gyro[1] = (int8_t) INS.Gyro[1];
+        Gimbal_Data.CH_Gyro[2] = (int8_t) INS.Gyro[2];
+        Gimbal_Data.CH_Pitch = (int8_t) INS.Pitch;
+        Gimbal_Data.CH_Roll = (int8_t) INS.Roll;
         CANCommSend(CANCOM, (uint8_t *) &Gimbal_Data);
 #elifdef MCU_GIMBAL // @todo 目前只是云台板发送，底盘板不发送，之后的数据交互可以再调整
         CANCommSend(CANCOM, (uint8_t *) &Chassis_Data);
@@ -113,7 +132,7 @@ void CmdTask(void *argument) {
         PubPushMessage(gimbal_cmd_pub, (void *) &gimbal_cmd_send);
 #endif
 
-        osDelay(4);
+        osDelay(3);
     }
 }
 
@@ -126,9 +145,9 @@ static void Robot_Cmd_Init(void) {
     vision_recv_data = VisionInit();
 
     // 上台阶履带PID参数
-    PID_Param(&UPPID, -6.0f, -3.0f, 0.0f,
+    PID_Param(&UPPID, 0.0f, -1.0f, 0.0f,
               Integral_Limit | Derivative_On_Measurement,
-              1.0f, 10, 10, 90);
+              1.0f, 6, 0.2f, 0.2f);
 
     gimbal_cmd_pub = PubRegister("gimbal_cmd", sizeof(Gimbal_Ctrl_Cmd_s));
     gimbal_feed_sub = SubRegister("gimbal_feed", sizeof(Gimbal_Upload_Data_s));
@@ -163,12 +182,13 @@ static void CalcOffsetAngle(void) //计算偏移角度角度范围0-360
  */
 static void Robot_Cmd_Serve(void) {
     // 左右两杆均拨下，紧急断电
-    if (switch_is_down(RC_data[TEMP].rc.switch_left) && switch_is_down(RC_data[TEMP].rc.switch_right)) {
+    chassis_cmd_send.chassis_last_mode = chassis_cmd_send.chassis_mode;
+    if ((switch_is_down(RC_data[TEMP].rc.switch_left) && switch_is_down(RC_data[TEMP].rc.switch_right)) ||
+        Timeout_flag) {
         Emergency_Stop();
         return;
     }
     // 射击指令
-    chassis_cmd_send.chassis_last_mode = chassis_cmd_send.chassis_mode;
     shoot_cmd_send.shoot_mode = SHOOT_ON;
     LED_Red_Down;
 
@@ -299,8 +319,7 @@ static void Keyboard_Cmd(void) {
             chassis_cmd_send.a_track_head += RC_data[TEMP].key[KEY_PRESS].q ? 0.3f : 0.0f;
             chassis_cmd_send.a_track_head -= RC_data[TEMP].key[KEY_PRESS].e ? 0.3f : 0.0f;
             chassis_cmd_send.a_track_head = Angle_limit(chassis_cmd_send.a_track_head, MAX_ANGLE_TRACK, 0.0f);
-            chassis_cmd_send.a_track_back = 105 + PID_Calculate(&UPPID, 0.0f,
-                                                                gimbal_fetch_data.gimbal_imu_data.Roll);
+            chassis_cmd_send.a_track_back = 105 + PID_Calculate(&UPPID, 0.0f, Gimbal_Rec->CH_Pitch);
             chassis_cmd_send.a_track_back = Angle_limit(chassis_cmd_send.a_track_back, MAX_ANGLE_TRACK, 105.0f);
             break;
         case TRACK_EXTEND:
@@ -334,10 +353,10 @@ static void RemoteControl_Cmd(void) {
         shoot_cmd_send.load_mode = LOAD_STOP; //停止
 
     static uint8_t up_count, down_count, flag = 0; //高度差计数，flag履带状态标志
-    //左杆在下，右杆在中，底盘自由控制，云台不控制
+    //左杆在下，右杆在中，底盘小陀螺
     if (switch_is_down(RC_data[TEMP].rc.switch_left) && switch_is_mid(RC_data[TEMP].rc.switch_right)) {
-        chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
-        gimbal_cmd_send.gimbal_mode = GIMBAL_FREE_MODE;
+        chassis_cmd_send.chassis_mode = CHASSIS_ROTATE;
+        gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
         chassis_cmd_send.track = TRACK_NONE;
         flag = 0;
     }
@@ -348,17 +367,17 @@ static void RemoteControl_Cmd(void) {
         chassis_cmd_send.track = TRACK_NONE;
         flag = 0;
     }
-    // 左杆在中，右杆在上，履带为降下模式
-    else if (switch_is_mid(RC_data[TEMP].rc.switch_left) && switch_is_up(RC_data[TEMP].rc.switch_right)) {
+    // 左杆在中，右杆在中，履带为降下模式
+    else if (switch_is_mid(RC_data[TEMP].rc.switch_left) && switch_is_mid(RC_data[TEMP].rc.switch_right)) {
         chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
         gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
         chassis_cmd_send.track = TRACK_EXTEND;
         flag = 0;
     }
-    // 左杆在中，右杆在中，履带为上台阶模式
-    else if (switch_is_mid(RC_data[TEMP].rc.switch_left) && switch_is_mid(RC_data[TEMP].rc.switch_right)) {
-        chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
-        gimbal_cmd_send.gimbal_mode = GIMBAL_ZERO_FORCE;
+    // 左杆在中，右杆在上，履带为上台阶模式
+    else if (switch_is_mid(RC_data[TEMP].rc.switch_left) && switch_is_up(RC_data[TEMP].rc.switch_right)) {
+        chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
+        gimbal_cmd_send.gimbal_mode = GIMBAL_FREE_MODE;
         chassis_cmd_send.track = TRACK_UP;
     }
     // 左杆在上，右杆在中，开启自瞄模式
@@ -373,35 +392,39 @@ static void RemoteControl_Cmd(void) {
 
     switch (chassis_cmd_send.track) {
         case TRACK_UP:
-            up_count = HC_Measure > MAX_DISTANCE && flag == 0 ? up_count + 1 : 0;
-            down_count = HC_Measure < MIN_DISTANCE && flag == 1 ? down_count + 1 : 0;
-            flag = up_count > 50 ? 1 : flag;
-            flag = down_count > 50 ? 2 : flag;
+            if (Gimbal_Rec->CH_Pitch < -10)
+                flag = 2; //俯仰角过小，认为上台阶完成
+            // up_count = HC_Measure > MAX_DISTANCE && flag == 0 ? up_count + 1 : 0;
+            // down_count = HC_Measure < MIN_DISTANCE && flag == 1 ? down_count + 1 : 0;
+            // flag = up_count > 20 ? 1 : flag;
+            // flag = down_count > 20 ? 2 : flag;
 
-            chassis_cmd_send.a_track_head += (float) RC_data[TEMP].rc.rocker_r1 * 0.00034f;
-            chassis_cmd_send.a_track_head = Angle_limit(chassis_cmd_send.a_track_head, MAX_ANGLE_TRACK, 0.0f);
-            chassis_cmd_send.a_track_back = 105 + PID_Calculate(&UPPID, 0.0f,
-                                                                gimbal_fetch_data.gimbal_imu_data.Roll);
-            chassis_cmd_send.a_track_back = Angle_limit(chassis_cmd_send.a_track_back, MAX_ANGLE_TRACK, 105.0f);
+            chassis_cmd_send.a_track_head += (float) RC_data[TEMP].rc.rocker_r1 * 0.0006f;
+            chassis_cmd_send.a_track_head = Angle_limit(chassis_cmd_send.a_track_head,
+                                                        MAX_ANGLE_TRACK, 40.0f);
+            chassis_cmd_send.a_track_back += PID_Calculate(&UPPID, 0.0f,
+                                                           Gimbal_Rec->CH_Pitch);
+            chassis_cmd_send.a_track_back = Angle_limit(chassis_cmd_send.a_track_back, MAX_ANGLE_TRACK,
+                                                        105.0f);
             break;
         case TRACK_EXTEND:
             chassis_cmd_send.a_track_head = MAX_ANGLE_TRACK;
             chassis_cmd_send.a_track_back = MAX_ANGLE_TRACK;
             break;
         case TRACK_ROTATE:
-            chassis_cmd_send.a_track_head = 0.0f;
-            chassis_cmd_send.a_track_back = 0.0f;
+            chassis_cmd_send.a_track_head = 0;
+            chassis_cmd_send.a_track_back = 0;
             // @todo 小陀螺先不写
             break;
         case TRACK_NONE:
-            chassis_cmd_send.a_track_head = 0.0f;
-            chassis_cmd_send.a_track_back = 0.0f;
+            chassis_cmd_send.a_track_head = 0;
+            chassis_cmd_send.a_track_back = 0;
             break;
     }
     // 跟随云台转动，右拨杆控制云台俯仰和偏航
     if (gimbal_cmd_send.gimbal_mode == GIMBAL_GYRO_MODE) {
-        gimbal_cmd_send.yaw -= 0.00034f * (float) RC_data[TEMP].rc.rocker_r_;
-        gimbal_cmd_send.pitch += 0.0001f * (float) RC_data[TEMP].rc.rocker_r1;
+        gimbal_cmd_send.yaw -= 0.00047f * (float) RC_data[TEMP].rc.rocker_r_;
+        gimbal_cmd_send.pitch -= 0.0006f * (float) RC_data[TEMP].rc.rocker_r1;
         gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, 20.0f, -35.0f);
     }
     // 视觉模式
@@ -410,13 +433,9 @@ static void RemoteControl_Cmd(void) {
         gimbal_cmd_send.pitch = vision_recv_data->pitch;
         gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, 20.0f, -35.0f);
     }
-    // 自由模式,右拨杆控制底盘旋转
-    else if (gimbal_cmd_send.gimbal_mode == GIMBAL_FREE_MODE)
-        chassis_cmd_send.wz = (float) RC_data[TEMP].rc.rocker_r_ * 0.151f;
-
     // 平移速度设置
-    chassis_cmd_send.vy = (float) RC_data[TEMP].rc.rocker_l1 * 0.151f * 30.0f; // 最高3m/s
+    chassis_cmd_send.vy = (float) RC_data[TEMP].rc.rocker_l1 * 0.151f * 10.0f; // 最高1m/s
     chassis_cmd_send.chassis_mode == CHASSIS_INDEPENDENCE
-        ? (chassis_cmd_send.wz = (float) RC_data[TEMP].rc.rocker_l_ * 0.00151f * 3.0f) // 最高3转/s
-        : (chassis_cmd_send.vx = -(float) RC_data[TEMP].rc.rocker_l_ * 0.151f * 30.0f); // 最高3m/s
+        ? (chassis_cmd_send.wz = (float) RC_data[TEMP].rc.rocker_l_ * 0.00151f * 1.0f) // 最高1转/s
+        : (chassis_cmd_send.vx = -(float) RC_data[TEMP].rc.rocker_l_ * 0.151f * 10.0f); // 最高1m/s
 }

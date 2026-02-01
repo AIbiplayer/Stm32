@@ -9,6 +9,8 @@
  *
  */
 #include "bsp_usart.h"
+
+#include "bsp_dwt.h"
 #include "stdlib.h"
 #include "string.h"
 #include "stdio.h"
@@ -20,6 +22,7 @@
 /* usart服务实例,所有注册了usart的模块信息会被保存在这里 */
 static uint8_t idx;
 static USARTInstance* usart_instance[DEVICE_USART_CNT] = {NULL};
+extern float Timeout;
 
 /**
  * @brief 启动串口服务,会在每个实例注册之后自动启用接收,当前实现为DMA接收,后续可能添加IT和BLOCKING接收
@@ -105,6 +108,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t Size)
         // find the instance which is being handled
         if (huart == usart_instance[i]->usart_handle)
         {
+            Timeout = DWT_GetTimeline_ms();
             // call the callback function if it is not NULL
             if (usart_instance[i]->module_callback != NULL)
             {

@@ -27,7 +27,7 @@ static float uint_to_float(int x_int, float x_min, float x_max, int bits);
 static float degree_to_rad(int16_t degree);
 
 /**
- * @brief 注册大疆电机实例
+ * @brief 注册达妙电机实例
  * @return 电机实例指针
  */
 DM_Motor_Instance *DM_Motor_Init(DM_Motor_Init_s *Motor_Init) {
@@ -55,8 +55,6 @@ void DM_Motor_Control(void) {
     for (uint8_t i = 0; i < Idx; i++) {
         const DM_Motor_Instance *DM_Instance = DM_Instance_Group[i]; //使用指针提取电机实例
         DM_Control_Setting_s Control_Setting = DM_Instance->Control_Setting;
-        if (Control_Setting.a_target_last == Control_Setting.a_target)
-            continue; //目标值未变化则不发送
         if (Control_Setting.Reverse_Flag == MOTOR_REVERSE) //判断取反
             Control_Setting.a_target *= -1;
         Control_Setting.a_target = degree_to_rad((int16_t) Control_Setting.a_target);
@@ -72,8 +70,8 @@ void DM_Motor_Control(void) {
         DM_Instance->Motor_Can_Instance->tx_buff[6] = *(v_ptr + 2);
         DM_Instance->Motor_Can_Instance->tx_buff[7] = *(v_ptr + 3);
 
-        // if (DM_Instance->Work_Type == MOTOR_ENABLE)
-        //     CANTransmit(DM_Instance->Motor_Can_Instance, 1);
+        if (DM_Instance->Work_Type == MOTOR_ENABLE)
+            CANTransmit(DM_Instance->Motor_Can_Instance, 1); //发送CAN
     }
 }
 

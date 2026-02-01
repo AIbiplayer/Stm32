@@ -32,6 +32,9 @@ typedef struct //@todo 后续补充底盘反馈数据
 
 typedef struct {
     float distance; ///< 超声波测量值
+    int8_t CH_Roll; ///< 底盘的横滚角
+    int8_t CH_Pitch; ///< 底盘的俯仰角
+    int8_t CH_Gyro[3];///< 底盘的三轴角速度
 } TMC_To_Gimbal_s; ///< 从底盘发送到云台的控制数据结构体
 #pragma pack()
 

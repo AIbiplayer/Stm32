@@ -77,13 +77,13 @@ static void Chassis_Init(void) {
 
     //初始化PID参数
     PID_Param(&Mec_Chassis.Control_Setting.Speed_PID,
-              25,
+              23,
               0,
               0,
               Integral_Limit | Derivative_On_Measurement,
               0,
               0,
-              1000,
+              500,
               8000);
 
     Mec_Chassis.Can_Init_Config.tx_id = 1;
@@ -107,7 +107,7 @@ static void Chassis_Init(void) {
     PLMotor_Register(Mec_Wheel[3]);
 
     DM_Motor_Init_s Track = {
-        .Can_Init_Config = {.can_handle = &hcan2},
+        .Can_Init_Config = {.can_handle = &hcan1},
         .DM_Control = {
             .Angle_Feedback_Source = MOTOR_FEEDBACK,
             .Speed_Feedback_Source = MOTOR_FEEDBACK,
@@ -126,7 +126,7 @@ static void Chassis_Init(void) {
     Track.DM_Control.Reverse_Flag = MOTOR_NORMAL;
     Track_Wheel[1] = DM_Motor_Init(&Track);
 
-    Track.Can_Init_Config.can_handle = &hcan1;
+    Track.Can_Init_Config.can_handle = &hcan2;
     Track.Can_Init_Config.rx_id = 5;
     Track.DM_Control.Reverse_Flag = MOTOR_REVERSE;
     Track_Wheel[2] = DM_Motor_Init(&Track);
@@ -145,10 +145,10 @@ static void Chassis_Init(void) {
     DM_MotorSaveZero(Track_Wheel[2]);
     DM_MotorSaveZero(Track_Wheel[3]);
 
-    PID_Param(&WZ_ROTATE_PID, 0.0f, 1.0f, 0, Integral_Limit | Derivative_On_Measurement,
-              1.0f, 0.0f, 3, 3);
-    PID_Param(&WZ_FOLLOW_PID, 2.7f, 0.0f, 0.1f, Integral_Limit | Derivative_On_Measurement | OutputFilter,
-              0.9f, 0.0f, 20, 200);
+    PID_Param(&WZ_ROTATE_PID, 5.0f, 0.0f, 1.5f, Integral_Limit | Derivative_On_Measurement,
+              1.0f, 0.0f, 0.5f, 0.5f); // 最高0.5转/秒
+    PID_Param(&WZ_FOLLOW_PID, 2.7f, 0.0f, 0.2f, Integral_Limit | Derivative_On_Measurement | OutputFilter,
+              0.9f, 0.0f, 20, 0.3f); // 最高0.3转/秒
 
     Chassis_Data = (TMC_To_Chassis_s *) CANCommGet(CANCOM);
 }
@@ -169,10 +169,10 @@ static void Speed_Calculate(void) {
     switch (chassis_cmd_recv.chassis_mode) {
         case CHASSIS_FOLLOW_GIMBAL_YAW: {
             PID_Clean_I(&WZ_ROTATE_PID);
-            chassis_vx = chassis_cmd_recv.vx * cos_theta - chassis_cmd_recv.vy * sin_theta;
-            chassis_vy = chassis_cmd_recv.vx * sin_theta + chassis_cmd_recv.vy * cos_theta;
+            chassis_vx = chassis_cmd_recv.vy * cos_theta - chassis_cmd_recv.vx * sin_theta;
+            chassis_vy = chassis_cmd_recv.vy * sin_theta + chassis_cmd_recv.vx * cos_theta;
 
-            if (fabsf(chassis_cmd_recv.angle_offset_c) >= 8.0f)
+            if (fabsf(chassis_cmd_recv.angle_offset_c) >= 7.0f)
                 chassis_vw = PID_Calculate(&WZ_FOLLOW_PID, 0, chassis_cmd_recv.angle_offset_c);
             else
                 chassis_vw = 0;
@@ -180,9 +180,9 @@ static void Speed_Calculate(void) {
         }
         case CHASSIS_ROTATE: {
             PID_Clean_I(&WZ_FOLLOW_PID);
-            chassis_vw = PID_Calculate(&WZ_ROTATE_PID, 0.001f, 0);
-            chassis_vx = chassis_cmd_recv.vx * cos_theta - chassis_cmd_recv.vy * sin_theta;
-            chassis_vy = chassis_cmd_recv.vx * sin_theta + chassis_cmd_recv.vy * cos_theta;
+            chassis_vw = PID_Calculate(&WZ_ROTATE_PID, 0.1f, 0);
+            chassis_vx = chassis_cmd_recv.vy * cos_theta - chassis_cmd_recv.vx * sin_theta;
+            chassis_vy = chassis_cmd_recv.vy * sin_theta + chassis_cmd_recv.vx * cos_theta;
             break;
         }
         case CHASSIS_INDEPENDENCE: {
@@ -240,10 +240,10 @@ static void Chassis_Output(void) {
     DJI_MotorSetTarget(Mec_Wheel[2], Mec_V3);
     DJI_MotorSetTarget(Mec_Wheel[3], Mec_V4);
 
-    DM_MotorSet(Track_Wheel[0], chassis_cmd_recv.a_track_head * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 12.2f);
-    DM_MotorSet(Track_Wheel[1], chassis_cmd_recv.a_track_head * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 12.2f);
-    DM_MotorSet(Track_Wheel[2], chassis_cmd_recv.a_track_back * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 12.2f);
-    DM_MotorSet(Track_Wheel[3], chassis_cmd_recv.a_track_back * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 12.2f);
+    DM_MotorSet(Track_Wheel[0], (float)chassis_cmd_recv.a_track_head * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 7.8f);
+    DM_MotorSet(Track_Wheel[1], (float)chassis_cmd_recv.a_track_head * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 7.8f);
+    DM_MotorSet(Track_Wheel[2], (float)chassis_cmd_recv.a_track_back * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 7.8f);
+    DM_MotorSet(Track_Wheel[3], (float)chassis_cmd_recv.a_track_back * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 7.8f);
 }
 
 #endif
