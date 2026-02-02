@@ -12,7 +12,6 @@
 
 #define MCU_GIMBAL   // 分别定义云台板和底盘板
 // #define MCU_CHASSIS   // 分别定义云台板和底盘板
-
 #define TMC_CHASSIS_CAN_ID 0x114 // 底盘板TMC的CAN ID
 #define TMC_GIMBAL_CAN_ID 0x115 // 云台板TMC的CAN ID
 

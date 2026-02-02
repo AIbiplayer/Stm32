@@ -216,7 +216,22 @@ static void Emergency_Stop(void) {
  * @brief 键盘控制指令解析
  */
 static void Keyboard_Cmd(void) {
-    static float max_speed = 1000.0f; //默认最大速度3m/s
+    static float max_speed = 1000.0f; //默认最大速度1m/s
+
+    if (RC_data[TEMP].key[KEY_PRESS].ctrl) //Ctrl键按住升高模式
+    {
+        chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
+        chassis_cmd_send.track = TRACK_EXTEND;
+    } else if (RC_data[TEMP].key_count[KEY_PRESS][Key_C] % 2 == 1) // C键切换履带上台阶
+    {
+        chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
+        chassis_cmd_send.track = TRACK_UP;
+    } else // 默认底盘随云台转动
+    {
+        chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
+        chassis_cmd_send.track = TRACK_NONE;
+    }
+
     //WASD方向平移
     if (RC_data[TEMP].key[KEY_PRESS].w)
         chassis_cmd_send.vy = (chassis_cmd_send.vy < max_speed) ? (chassis_cmd_send.vy += 10.0f) : max_speed;
@@ -224,27 +239,21 @@ static void Keyboard_Cmd(void) {
         chassis_cmd_send.vy = (chassis_cmd_send.vy > -max_speed) ? (chassis_cmd_send.vy -= 10.0f) : -max_speed;
     else chassis_cmd_send.vy = 0;
 
-    if (RC_data[TEMP].key[KEY_PRESS].d)
-        chassis_cmd_send.vx = (chassis_cmd_send.vx > max_speed) ? (chassis_cmd_send.vx += 10.0f) : max_speed;
-    else if (RC_data[TEMP].key[KEY_PRESS].a)
-        chassis_cmd_send.vx = (chassis_cmd_send.vx > -max_speed) ? (chassis_cmd_send.vx -= 10.0f) : -max_speed;
-    else
-        chassis_cmd_send.vx = 0;
-
-    switch (RC_data[TEMP].key_count[KEY_PRESS][Key_C] % 3) //C键切换履带模式
-    {
-        case 0: // 履带收回
-            chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
-            chassis_cmd_send.track = TRACK_NONE;
-            break;
-        case 1: // 履带伸长
-            chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
-            chassis_cmd_send.track = TRACK_EXTEND;
-            break;
-        case 2: // 履带上台阶模式
-            chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
-            chassis_cmd_send.track = TRACK_UP;
-            break;
+    if (chassis_cmd_send.chassis_mode == CHASSIS_INDEPENDENCE) {
+        if (RC_data[TEMP].key[KEY_PRESS].d)
+            chassis_cmd_send.wz = (chassis_cmd_send.wz < 0.5f) ? (chassis_cmd_send.wz += 0.01f) : 0.5f;
+        else if (RC_data[TEMP].key[KEY_PRESS].a)
+            chassis_cmd_send.wz = (chassis_cmd_send.wz > -0.5f) ? (chassis_cmd_send.wz -= 0.01f) : -0.5f;
+        else
+            chassis_cmd_send.wz = 0;
+    }
+    else {
+        if (RC_data[TEMP].key[KEY_PRESS].d)
+            chassis_cmd_send.vx = (chassis_cmd_send.vx < max_speed) ? (chassis_cmd_send.vx -= 10.0f) : max_speed;
+        else if (RC_data[TEMP].key[KEY_PRESS].a)
+            chassis_cmd_send.vx = (chassis_cmd_send.vx > -max_speed) ? (chassis_cmd_send.vx += 10.0f) : -max_speed;
+        else
+            chassis_cmd_send.vx = 0;
     }
     // 按住Shift键底盘小陀螺 todo 后续增加与履带协同的小陀螺
     if (RC_data[TEMP].key[KEY_PRESS].shift)
@@ -260,8 +269,8 @@ static void Keyboard_Cmd(void) {
     //不按右键云台自由移动
     else {
         gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
-        gimbal_cmd_send.yaw += (float) RC_data[TEMP].mouse.x / 660 * 2.4f; //3.5
-        gimbal_cmd_send.pitch += -(float) RC_data[TEMP].mouse.y / 660 * 1.3f; //-2.5
+        gimbal_cmd_send.yaw -= (float) RC_data[TEMP].mouse.x / 660 * 2.4f; //3.5
+        gimbal_cmd_send.pitch += (float) RC_data[TEMP].mouse.y / 660 * 1.3f; //-2.5
         gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, 20.0f, -35.0f);
     }
     switch (RC_data[TEMP].key_count[KEY_PRESS][Key_F] % 2) // F键开关摩擦轮
@@ -307,33 +316,40 @@ static void Keyboard_Cmd(void) {
     }
 
     // 履带控制,和遥控器稍微不同
-    static uint8_t up_count, down_count, flag = 0; //高度差计数，flag履带状态标志
-    if (flag == 2)
+    static uint8_t flag = 0; //高度差计数，flag履带状态标志
+    if (flag == 2) {
         chassis_cmd_send.track = TRACK_NONE;
+        chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
+    }
     switch (chassis_cmd_send.track) {
         case TRACK_UP:
-            up_count = HC_Measure > MAX_DISTANCE && flag == 0 ? up_count + 1 : 0;
-            down_count = HC_Measure < MIN_DISTANCE && flag == 1 ? down_count + 1 : 0;
-            flag = up_count > 50 ? 1 : flag;
-            flag = down_count > 50 ? 2 : flag;
-            chassis_cmd_send.a_track_head += RC_data[TEMP].key[KEY_PRESS].q ? 0.3f : 0.0f;
-            chassis_cmd_send.a_track_head -= RC_data[TEMP].key[KEY_PRESS].e ? 0.3f : 0.0f;
-            chassis_cmd_send.a_track_head = Angle_limit(chassis_cmd_send.a_track_head, MAX_ANGLE_TRACK, 0.0f);
-            chassis_cmd_send.a_track_back = 105 + PID_Calculate(&UPPID, 0.0f, Gimbal_Rec->CH_Pitch);
+            if (Gimbal_Rec->CH_Pitch < -10)
+                flag = 2; // 云台俯角大于10度，认为上完台阶，收回履带
+            // up_count = HC_Measure > MAX_DISTANCE && flag == 0 ? up_count + 1 : 0;
+            // down_count = HC_Measure < MIN_DISTANCE && flag == 1 ? down_count + 1 : 0;
+            // flag = up_count > 50 ? 1 : flag;
+            // flag = down_count > 50 ? 2 : flag;
+            chassis_cmd_send.a_track_head += RC_data[TEMP].key[KEY_PRESS].q ? 0.2f : 0.0f;
+            chassis_cmd_send.a_track_head -= RC_data[TEMP].key[KEY_PRESS].e ? 0.2f : 0.0f;
+            chassis_cmd_send.a_track_head = Angle_limit(chassis_cmd_send.a_track_head, MAX_ANGLE_TRACK, 40.0f);
+            chassis_cmd_send.a_track_back += PID_Calculate(&UPPID, 0.0f, Gimbal_Rec->CH_Pitch);
             chassis_cmd_send.a_track_back = Angle_limit(chassis_cmd_send.a_track_back, MAX_ANGLE_TRACK, 105.0f);
             break;
         case TRACK_EXTEND:
             chassis_cmd_send.a_track_head = MAX_ANGLE_TRACK;
             chassis_cmd_send.a_track_back = MAX_ANGLE_TRACK;
+            flag = 0;
             break;
         case TRACK_ROTATE:
             chassis_cmd_send.a_track_head = 0.0f;
             chassis_cmd_send.a_track_back = 0.0f;
+            flag = 0;
             // @todo 小陀螺先不写
             break;
         case TRACK_NONE:
             chassis_cmd_send.a_track_head = 0.0f;
             chassis_cmd_send.a_track_back = 0.0f;
+            flag = 0;
             break;
     }
 }
