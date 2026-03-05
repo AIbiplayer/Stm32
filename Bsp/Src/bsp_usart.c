@@ -9,14 +9,13 @@
  *
  */
 #include "bsp_usart.h"
-
 #include "bsp_dwt.h"
 #include "stdlib.h"
 #include "string.h"
 #include "stdio.h"
 #include "stdarg.h"
 #include "FreeRTOS.h"
-#include "task.h"
+#include "referee.h"
 
 /* usart service instance, modules' info would be recoreded here using USARTRegister() */
 /* usart服务实例,所有注册了usart的模块信息会被保存在这里 */
@@ -60,7 +59,7 @@ USARTInstance* USARTRegister(USART_Init_Config_s* init_config)
  */
 void Uart_printf(const USART_TRANSFER_MODE Mode, UART_HandleTypeDef* huart, char* format, ...)
 {
-    char buf[128]; // 定义临时数组，根据实际发送大小微调
+    char buf[64]; // 定义临时数组，根据实际发送大小微调
     va_list args;
     va_start(args, format);
     uint32_t len = vsnprintf((char*)buf, sizeof(buf), (char*)format, args);

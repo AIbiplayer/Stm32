@@ -8,23 +8,38 @@
  * @copyright Copyright (c) 2022
  *
  */
-
-#include "seasky_protocol.h"
 #include "master_process.h"
-#include "bsp_usb.h"
 #include "robot_def.h"
-#include "main.h"
+#include "bsp_usb.h"
 
-CCMRAM static Vision_Recv_s recv_data; // 接收到的数据
-CCMRAM static Vision_Send_s send_data; // 待发送的数据
-CCMRAM static uint8_t send_buff[VISION_SEND_SIZE]; // 发送缓冲区
+static Vision_Recv_s recv_data; // 接收到的数据
+static Vision_Send_s send_data; // 待发送的数据
+static uint8_t send_buff[VISION_SEND_SIZE]; // 发送缓冲区
 
 extern USB_Control_t g_usb_dev; // 全局USB设备实例
 
-void VisionSetAltitude(float yaw, float pitch, float roll) {
-    send_data.yaw = yaw;
-    send_data.pitch = pitch;
-    send_data.roll = roll;
+void VisionSetFlag(Enemy_Color_e enemy_color, Work_Mode_e work_mode, Bullet_Speed_e bullet_speed) {
+    // send_data.enemy_color = enemy_color;
+    // send_data.work_mode = work_mode;
+    // send_data.bullet_speed = bullet_speed;
+}
+
+void VisionSetAltitude(float yaw, float pitch) {
+    send_data.gimbal_data.yaw = yaw;
+    send_data.gimbal_data.pitch = pitch;
+}
+
+/**
+ * @brief 离线回调函数,将在daemon.c中被daemon task调用
+ * @attention 由于HAL库的设计问题,串口开启DMA接收之后同时发送有概率出现__HAL_LOCK()导致的死锁,使得无法
+ *            进入接收中断.通过daemon判断数据更新,重新调用服务启动函数以解决此问题.
+ *
+ * @param id vision_usart_instance的地址,此处没用.
+ */
+static void VisionOfflineCallback(void *id) {
+#ifdef VISION_USE_UART
+    USARTServiceInit(vision_usart_instance);
+#endif // !VISION_USE_UART
 }
 
 #ifdef VISION_USE_UART
@@ -92,10 +107,11 @@ void VisionSend()
 
 #ifdef VISION_USE_VCP
 
+#include "bsp_usb.h"
 static uint8_t *vis_recv_buff;
 
-static void DecodeVision(void) {
-    get_protocol_info(vis_recv_buff, (uint8_t *) &recv_data);
+static void DecodeVision(uint16_t recv_len) {
+    get_protocol_info(vis_recv_buff, &recv_data);
 }
 
 /* 视觉通信初始化 */
@@ -107,8 +123,11 @@ Vision_Recv_s *VisionInit(void) {
 
 void VisionSend(void) {
     static uint16_t tx_len;
+
+    send_data.cmd_data_type = TX_GIMBAL_POSITION;
+    tx_len = sizeof(send_data.gimbal_data);
     // 将数据转化为seasky协议的数据包
-    get_protocol_send_data((float *) &send_data, send_buff, &tx_len);
+    get_protocol_send_data(&send_data, send_buff, &tx_len);
     bsp_usb_transmit(send_buff, tx_len);
     memset(send_buff, 0, sizeof(send_buff));
 }

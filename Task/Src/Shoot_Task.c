@@ -11,10 +11,17 @@
 #include "message_center.h"
 #include "Motor_Def.h"
 #include "robot_def.h"
+#include "alg_queue.h"
 #include "DJI_Motor.h"
 #include "TMC.h"
+#include "can_comm.h"
+#include "referee.h"
 
 static void Shoot_Init(void);
+
+static void Calorie_Monitor(void);
+
+static void FireContorl(void);
 
 static void Shoot_Status_Serve(void);
 
@@ -28,6 +35,22 @@ static uint8_t Shoot_One_Bullet_Flag = 0;
 static float Shoot_Relieve_Time = 0;
 static uint8_t Shoot_Relieve_Flag = 0;
 
+// 热量检测代码
+static shoot_detection_e shoot_state = SHOOT_DETECTION_STOP; //发射状态
+static Shooter_Type_e shooter_type; //发射机构模式，爆发优先和冷却优先
+static float now_heat_cd = 0; //当前冷却值
+static float now_heat = 0; //17mm枪口当前热量
+static float now_heat_calorie_monitor = 0; //热量监测用的当前热量,每次进入监测时更新
+static uint16_t heat_limit_max = 0; //17mm枪口热量上限
+static float Total_Ammo_Num = 0; //总弹量
+static float Current_Queue_Sum = 0; //电流队列和
+static Queue_t Current_Queue; //电流队列
+static uint32_t Calorie_Monitor_CNT = 0; //热量监测时间戳
+static float Current_Queue_Sum_Threshold = 160; //电流队列和的判定阈值,需要根据实际情况调整
+CCMRAM static TMC_To_Gimbal_s *Shoot_Data; // 底盘与云台数据结构体实例
+
+extern CANCommInstance *CANCOM;
+
 /**
  * @brief 射击FreeRTOS任务
  */
@@ -40,7 +63,11 @@ void ShootTask(void const *argument) {
     for (;;) {
 #ifdef MCU_GIMBAL
         SubGetMessage(shoot_sub, &shoot_cmd_recv);
+
+        Calorie_Monitor(); //热量自检
+
         Shoot_Status_Serve();
+
         PubPushMessage(shoot_pub, &shoot_feedback_data);
         osDelay(1);
 #endif
@@ -99,7 +126,7 @@ static void Shoot_Init(void) {
               1000,
               8000);
     PID_Param(&Friction.Control_Setting.Speed_PID,
-              11,
+              5,
               0,
               0,
               Integral_Limit | Derivative_On_Measurement,
@@ -120,6 +147,8 @@ static void Shoot_Init(void) {
     Friction.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Friction_R = DJI_Motor_Init(&Friction);
 
+    Shoot_Data = (TMC_To_Gimbal_s *) CANCommGet(CANCOM); // 获取底盘与云台数据结构体实例
+
     shoot_sub = SubRegister("shoot_cmd", sizeof(Shoot_Ctrl_Cmd_s));
 }
 
@@ -137,11 +166,33 @@ static void Shoot_Status_Serve(void) {
     DJI_MotorEnable(Friction_R);
     DJI_MotorEnable(Load_bullet);
 
+    // 热量检测与控制
+    if (Shoot_Data->Shoot_Upload_Data.reference_online_state == false) {
+        // 裁判系统掉线或远端信息不可信
+        if (shooter_type == Robot_Booster_Type_BURST) {
+            //爆发优先模式
+            heat_limit_max = booster_burst_first_heat_max[Shoot_Data->Shoot_Upload_Data.robot_level - 1];
+            now_heat_cd = booster_burst_first_heat_cd[Shoot_Data->Shoot_Upload_Data.robot_level - 1];
+        } else if (shooter_type == Robot_Booster_Type_CD) {
+            //冷却优先模式
+            heat_limit_max = booster_cd_first_heat_max[Shoot_Data->Shoot_Upload_Data.robot_level - 1];
+            now_heat_cd = booster_cd_first_heat_cd[Shoot_Data->Shoot_Upload_Data.robot_level - 1];
+        }
+        now_heat = now_heat_calorie_monitor;
+    } else {
+        // 裁判系统可信
+        heat_limit_max = Shoot_Data->Shoot_Upload_Data.shooter_heat_limit;
+        now_heat_cd = Shoot_Data->Shoot_Upload_Data.shooter_barrel_cooling_value;
+        now_heat = Shoot_Data->Shoot_Upload_Data.heat;
+    }
+
+    FireContorl();//根据热量调整射频
+
     // 摩擦轮控制,单位m/s
     switch (shoot_cmd_recv.friction_mode) {
         case FRICTION_ON:
-            DJI_MotorSetTarget(Friction_L, 15 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);
-            DJI_MotorSetTarget(Friction_R, 15 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);
+            DJI_MotorSetTarget(Friction_L, 21 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);
+            DJI_MotorSetTarget(Friction_R, 21 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);
             break;
         case FRICTION_OFF:
             DJI_MotorSetTarget(Friction_L, 0);
@@ -191,12 +242,119 @@ static void Shoot_Status_Serve(void) {
         case LOAD_BURSTFIRE:
             DJI_MotorChangeLoop(Load_bullet, SPEED_CONTROL);
             DJI_MotorSetTarget(Load_bullet,
-                               shoot_cmd_recv.shoot_rate * REDUCTION_RATIO_LOADER * REDUCTION_SHOOT * RADS_2_RPM / NUM_PER_CIRCLE);
+                               shoot_cmd_recv.shoot_rate * 2 * PI * REDUCTION_RATIO_LOADER * REDUCTION_SHOOT *
+                               RADS_2_RPM / NUM_PER_CIRCLE);
             break;
         // 反转控制,单位rpm
         case LOAD_REVERSE:
             DJI_MotorChangeLoop(Load_bullet, SPEED_CONTROL);
             DJI_MotorSetTarget(Load_bullet, -8000);
             break;
+    }
+}
+
+/**
+ * @brief 热量检测函数
+ */
+static void Calorie_Monitor(void) //热量监测使用(未完成)
+{
+    static float now_heat = 0; //当前热量
+    switch (shoot_state) {
+        case SHOOT_DETECTION_STOP: {
+            // 停机状态，当摩擦轮启动且达到了目标速度时进入开机状态
+            if ((Friction_L->Working_Type == MOTOR_ENABLE && Friction_R->Working_Type == MOTOR_ENABLE) && (
+                    (float) Friction_L->Control_Setting.Power_Output > 0.0f && (float) Friction_R->Control_Setting.
+                    Power_Output < 0.0f)
+                && ((float) Friction_L->Measure.Speed >= (float) Friction_L->Control_Setting.Power_Output * 0.95f &&
+                    (float) Friction_R->Measure.Speed <= (float) Friction_R->Control_Setting.Power_Output * 0.95f)) {
+                // 摩擦轮达到了目标速度且电机存活->开机状态
+                shoot_state = SHOOT_DETECTION_READY;
+            }
+            break;
+        }
+        case SHOOT_DETECTION_READY: {
+            // 开机状态
+
+            float now_current = (Friction_L->Measure.Current - Friction_R->Measure.Current) / 16384 * 20.0f;
+            // 当前电流值,单位A,需要根据实际情况调整转换系数
+            Current_Queue_Sum += now_current;
+            Queue_Push(&Current_Queue, now_current);
+
+            // 计算窗口内电流和
+            // 如果队列满了，先弹出一个旧数据，并从总和中减去
+            if (Queue_Is_Full(&Current_Queue)) {
+                float old_val = 0;
+                Queue_Pop(&Current_Queue, &old_val); // 弹出最旧的数据
+                Current_Queue_Sum -= old_val; // 减去它的值
+            }
+
+            // 如果超过了判定阈值则认为是打出子弹
+            if (Current_Queue_Sum > Current_Queue_Sum_Threshold) {
+                // 触发后清空，防止连续误判
+                Queue_Clear(&Current_Queue);
+                Current_Queue_Sum = 0.0f;
+                now_heat += 10.0f;
+                Total_Ammo_Num++;
+            }
+
+            // 计算冷却
+            float dt = DWT_GetDeltaT(&Calorie_Monitor_CNT);
+            now_heat -= (float) (Shoot_Data->Shoot_Upload_Data.shooter_barrel_cooling_value) * dt;
+            if (now_heat < 0.0f) {
+                now_heat = 0.0f;
+            }
+
+            if ((Friction_L->Working_Type == MOTOR_STOP && Friction_R->Working_Type == MOTOR_STOP)
+                || (Friction_L->Control_Setting.Power_Output == 0 && Friction_R->Control_Setting.Power_Output == 0)) {
+                // 电机掉线->关机状态
+                Queue_Clear(&Current_Queue);
+                Current_Queue_Sum = 0.0f;
+                now_heat = 0.0f;
+
+                shoot_state = SHOOT_DETECTION_STOP;
+            }
+            break;
+        }
+        default:
+            shoot_state = SHOOT_DETECTION_STOP;
+            break;
+    }
+    now_heat_calorie_monitor = now_heat;
+}
+
+static void FireContorl(void) //发射状态机,防止热量超限
+{
+    float Qnow = now_heat; // 获取当前热量
+    uint16_t Qlimit = heat_limit_max; // 裁判系统热量上限 (例如 240/360)
+
+    // 定义阈值 (假设逻辑：热量越高，射速越慢)
+    // 下面这些值需要根据实际情况调整
+    float Q_safe = Qlimit - 100; // 安全区 (对应图中的 Qres 大)
+    float Q_warn = Qlimit - 40; // 警告区 (开始减速)
+    float Q_stop = Qlimit - 10; // 停止区 (对应图中的 Qres 小)
+
+    float target_rate = 15; // 原始设定的最大射频，不要直接用 shoot_cmd_recv.shoot_rate 修改
+
+    // 计算冷却对应的射频 (n_cd)
+    float cd_rate = now_heat_cd / HEAT_OF_PROJECTILE;
+
+    if (shoot_cmd_recv.load_mode == LOAD_BURSTFIRE) {
+        if (Qnow < Q_safe) {
+            // [安全区] 热量很低，全速发射
+            shoot_cmd_recv.shoot_rate = target_rate;
+        } else if (Qnow >= Q_safe && Qnow < Q_warn) {
+            // [线性限制区] 热量升高，从 target_rate 线性降低到 cd_rate
+            // 类似于图中斜坡的“镜像”
+            float ratio = (float) (Qnow - Q_safe) / (Q_warn - Q_safe);
+            shoot_cmd_recv.shoot_rate = target_rate - ratio * (target_rate - cd_rate);
+        } else if (Qnow >= Q_warn && Qnow < Q_stop) {
+            // [饱和区] 只允许以冷却速度发射
+            shoot_cmd_recv.shoot_rate = cd_rate;
+        } else {
+            // [危险区] 热量即将超限，停止发射
+            shoot_cmd_recv.shoot_rate = 0;
+            // 可选：强制切回停止模式
+            // shoot_cmd_recv.load_mode = LOAD_STOP;
+        }
     }
 }

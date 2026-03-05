@@ -56,6 +56,77 @@
 #define LB_CENTER ((HALF_TRACK_WIDTH + CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE + CENTER_GIMBAL_OFFSET_Y) * 6.28f)
 #define RB_CENTER ((HALF_TRACK_WIDTH - CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE + CENTER_GIMBAL_OFFSET_Y) * 6.28f)
 
+#define Qwarn 100//热量预警阈值
+#define Qsatu 40//热量饱和阈值
+#define Qthrsh 10//热量门限阈值
+#define HEAT_OF_PROJECTILE 10//单发弹丸的热量(由2026赛季RM规则决定)
+
+// 爆发优先热量打表
+static const float booster_burst_first_heat_max[10] = {
+    170.0f,
+    180.0f,
+    190.0f,
+    200.0f,
+    210.0f,
+    220.0f,
+    230.0f,
+    240.0f,
+    250.0f,
+    260.0f,
+};
+
+// 爆发优先冷却打表
+static const float booster_burst_first_heat_cd[10] = {
+    5.0f,
+    7.0f,
+    9.0f,
+    11.0f,
+    12.0f,
+    13.0f,
+    14.0f,
+    16.0f,
+    18.0f,
+    20.0f,
+};
+
+// 冷却优先热量打表
+static const float booster_cd_first_heat_max[10] = {
+    40.0f,
+    48.0f,
+    56.0f,
+    64.0f,
+    72.0f,
+    80.0f,
+    88.0f,
+    96.0f,
+    114.0f,
+    120.0f,
+};
+
+// 冷却优先冷却打表
+static const float booster_cd_first_heat_cd[10] = {
+    12.0f,
+    14.0f,
+    16.0f,
+    18.0f,
+    20.0f,
+    22.0f,
+    24.0f,
+    26.0f,
+    28.0f,
+    30.0f,
+};
+
+typedef enum {
+    SHOOT_DETECTION_STOP = 0, //停止检测
+    SHOOT_DETECTION_READY, //准备检测
+} shoot_detection_e; //射击检测状态
+
+typedef enum {
+    Robot_Booster_Type_BURST = 0, //爆发优先
+    Robot_Booster_Type_CD, //冷却优先
+} Shooter_Type_e; //射击方式
+
 #pragma pack(1) // 压缩结构体,取消字节对齐,下面的数据都可能被传输
 
 // 应用状态
@@ -98,10 +169,10 @@ typedef enum {
 } lid_mode_e;
 
 typedef enum {
-    LOAD_STOP = 0, // 停止发射
-    LOAD_REVERSE, // 反转
-    LOAD_1_BULLET, // 单发
-    LOAD_BURSTFIRE, // 连发
+    LOAD_STOP = 2, // 停止发射
+    LOAD_REVERSE = 3, // 反转
+    LOAD_1_BULLET = 1, // 单发
+    LOAD_BURSTFIRE = 0, // 连发
 } loader_mode_e;
 
 // 功率限制,从裁判系统获取,是否有必要保留?
@@ -164,9 +235,9 @@ typedef struct {
     // float real_vx;
     // float real_vy;
     // float real_wz;
-    uint8_t rest_heat; // 剩余枪口热量
-    Bullet_Speed_e bullet_speed; // 弹速限制
-    Enemy_Color_e enemy_color; // 0 for blue, 1 for red
+    // uint8_t rest_heat; // 剩余枪口热量
+    // Bullet_Speed_e bullet_speed; // 弹速限制
+    // Enemy_Color_e enemy_color; // 0 for blue, 1 for red
 } Chassis_Upload_Data_s;
 
 
@@ -176,6 +247,11 @@ typedef struct {
 } Gimbal_Upload_Data_s;
 
 typedef struct {
+    uint16_t heat; // 枪口热量
+    uint16_t shooter_heat_limit; // 枪口热量上限
+    uint8_t shooter_barrel_cooling_value; // 枪管冷却值
+    uint8_t robot_level: 7; // 机器人等级
+    uint8_t reference_online_state: 1; // 参考数据在线状态
 } Shoot_Upload_Data_s;
 
 #pragma pack() // 开启字节对齐,结束前面的#pragma pack(1)

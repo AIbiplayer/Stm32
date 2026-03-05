@@ -15,12 +15,16 @@
 #include "math.h"
 #include "robot_def.h"
 #include "TMC.h"
+#include "super_cap.h"
 #include "can_comm.h"
+
+#define SPEED_FILTER 0.4f // 轮子速度滤波系数，越大越平滑，但响应越慢
 
 #ifdef MCU_CHASSIS
 
 static float chassis_vx, chassis_vy, chassis_vw; // 将云台系的速度投影到底盘
 static float Mec_V1, Mec_V2, Mec_V3, Mec_V4; // 四轮速度
+static float Mec_V1_last, Mec_V2_last, Mec_V3_last, Mec_V4_last; // 上次四轮速度，用于滤波
 CCMRAM static DJI_Motor_Instance *Mec_Wheel[4];
 CCMRAM static DM_Motor_Instance *Track_Wheel[4];
 CCMRAM static Chassis_Ctrl_Cmd_s chassis_cmd_recv; // 底盘接收到的控制命令
@@ -39,6 +43,8 @@ static void Chassis_Status_Serve(void);
 
 static void Speed_Calculate(void);
 
+int16_t Speed1, Speed2, Speed3, Speed4;
+
 /**
  * @brief 底盘FreeRTOS任务
  */
@@ -50,6 +56,10 @@ void ChassisTask(void *argument) {
         Speed_Calculate();
         Chassis_Status_Serve();
         Chassis_Output();
+        Speed1 = Mec_Wheel[0]->Measure.Speed;
+        Speed2 = Mec_Wheel[1]->Measure.Speed;
+        Speed3 = Mec_Wheel[2]->Measure.Speed;
+        Speed4 = Mec_Wheel[3]->Measure.Speed;
         osDelay(1);
     }
 }
@@ -77,11 +87,11 @@ static void Chassis_Init(void) {
 
     //初始化PID参数
     PID_Param(&Mec_Chassis.Control_Setting.Speed_PID,
-              23,
+              21,
               0,
               0,
               Integral_Limit | Derivative_On_Measurement,
-              0,
+              1,
               0,
               500,
               8000);
@@ -107,7 +117,7 @@ static void Chassis_Init(void) {
     PLMotor_Register(Mec_Wheel[3]);
 
     DM_Motor_Init_s Track = {
-        .Can_Init_Config = {.can_handle = &hcan1},
+        .Can_Init_Config = {.can_handle = &hcan2},
         .DM_Control = {
             .Angle_Feedback_Source = MOTOR_FEEDBACK,
             .Speed_Feedback_Source = MOTOR_FEEDBACK,
@@ -147,8 +157,8 @@ static void Chassis_Init(void) {
 
     PID_Param(&WZ_ROTATE_PID, 5.0f, 0.0f, 1.5f, Integral_Limit | Derivative_On_Measurement,
               1.0f, 0.0f, 0.5f, 0.5f); // 最高0.5转/秒
-    PID_Param(&WZ_FOLLOW_PID, 2.7f, 0.0f, 0.2f, Integral_Limit | Derivative_On_Measurement | OutputFilter,
-              0.9f, 0.0f, 20, 0.3f); // 最高0.3转/秒
+    PID_Param(&WZ_FOLLOW_PID, 2.7f, 0.0f, 2.2f, Integral_Limit | Derivative_On_Measurement | OutputFilter,
+              0.9f, 0.0f, 20, 0.5f); // 最高0.5转/秒
 
     Chassis_Data = (TMC_To_Chassis_s *) CANCommGet(CANCOM);
 }
@@ -195,11 +205,17 @@ static void Speed_Calculate(void) {
             PID_Clean_I(&WZ_ROTATE_PID);
             break;
     }
+
     // 线速度为mm/s，角速度为转/s，轮子速度为rpm
-    Mec_V1 = (chassis_vx - chassis_vy + chassis_vw * LF_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL * RADS_2_RPM;
-    Mec_V2 = -(chassis_vx + chassis_vy - chassis_vw * LB_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL * RADS_2_RPM;
-    Mec_V3 = (chassis_vx - chassis_vy - chassis_vw * RB_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL * RADS_2_RPM;
-    Mec_V4 = -(chassis_vx + chassis_vy + chassis_vw * RF_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL * RADS_2_RPM;
+    Mec_V1_last = Mec_V1, Mec_V2_last = Mec_V2, Mec_V3_last = Mec_V3, Mec_V4_last = Mec_V4;
+    Mec_V1 = SPEED_FILTER * ((chassis_vx - chassis_vy + chassis_vw * LF_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL *
+                             RADS_2_RPM) + (1 - SPEED_FILTER) * Mec_V1_last;
+    Mec_V2 = SPEED_FILTER * (-(chassis_vx + chassis_vy - chassis_vw * LB_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL
+                             * RADS_2_RPM) + (1 - SPEED_FILTER) * Mec_V2_last;
+    Mec_V3 = SPEED_FILTER * ((chassis_vx - chassis_vy - chassis_vw * RB_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL *
+                             RADS_2_RPM) + (1 - SPEED_FILTER) * Mec_V3_last;
+    Mec_V4 = SPEED_FILTER * (-(chassis_vx + chassis_vy + chassis_vw * RF_CENTER) / RADIUS_WHEEL * REDUCTION_RATIO_WHEEL
+                             * RADS_2_RPM) + (1 - SPEED_FILTER) * Mec_V4_last;
 }
 
 /**
@@ -240,10 +256,10 @@ static void Chassis_Output(void) {
     DJI_MotorSetTarget(Mec_Wheel[2], Mec_V3);
     DJI_MotorSetTarget(Mec_Wheel[3], Mec_V4);
 
-    DM_MotorSet(Track_Wheel[0], (float)chassis_cmd_recv.a_track_head * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 7.8f);
-    DM_MotorSet(Track_Wheel[1], (float)chassis_cmd_recv.a_track_head * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 7.8f);
-    DM_MotorSet(Track_Wheel[2], (float)chassis_cmd_recv.a_track_back * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 7.8f);
-    DM_MotorSet(Track_Wheel[3], (float)chassis_cmd_recv.a_track_back * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 7.8f);
+    DM_MotorSet(Track_Wheel[0], chassis_cmd_recv.a_track_head * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 10.2f);
+    DM_MotorSet(Track_Wheel[1], chassis_cmd_recv.a_track_head * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 10.2f);
+    DM_MotorSet(Track_Wheel[2], chassis_cmd_recv.a_track_back * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 10.2f);
+    DM_MotorSet(Track_Wheel[3], chassis_cmd_recv.a_track_back * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL, 10.2f);
 }
 
 #endif

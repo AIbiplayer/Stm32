@@ -1,20 +1,15 @@
 /**
  * @file seasky_protocol.c
- * @author Liu Wei
- * @author modified by Neozng
- * @brief 湖南大学RoBoMatster串口通信协议
- * @version 0.1
- * @date 2022-11-03
- *
- * @copyright Copyright (c) 2022
+ * @brief 重庆理工大学RoBoMatster步兵串口通信协议
+ * @version 2.0
+ * @date 2026-3-03
  *
  */
-
-#include <string.h>
 
 #include "seasky_protocol.h"
 #include "crc8.h"
 #include "crc16.h"
+#include "memory.h"
 
 /*获取CRC8校验码*/
 uint8_t Get_CRC8_Check(uint8_t *pchMessage, uint16_t dwLength) {
@@ -22,13 +17,14 @@ uint8_t Get_CRC8_Check(uint8_t *pchMessage, uint16_t dwLength) {
 }
 
 /*检验CRC8数据段*/
-static uint8_t CRC8_Check_Sum(uint8_t *pchMessage, uint16_t dwLength) {
-    uint8_t ucExpected = 0;
-    if ((pchMessage == 0) || (dwLength <= 2))
-        return 0;
-    ucExpected = crc_8(pchMessage, dwLength - 1);
-    return (ucExpected == pchMessage[dwLength - 1]);
-}
+// static uint8_t CRC8_Check_Sum(uint8_t *pchMessage, uint16_t dwLength)
+// {
+//     uint8_t ucExpected = 0;
+//     if ((pchMessage == 0) || (dwLength <= 2))
+//         return 0;
+//     ucExpected = crc_8(pchMessage, dwLength - 1);
+//     return (ucExpected == pchMessage[dwLength - 1]);
+// }
 
 /*获取CRC16校验码*/
 uint16_t Get_CRC16_Check(uint8_t *pchMessage, uint32_t dwLength) {
@@ -36,26 +32,31 @@ uint16_t Get_CRC16_Check(uint8_t *pchMessage, uint32_t dwLength) {
 }
 
 /*检验CRC16数据段*/
-static uint16_t CRC16_Check_Sum(uint8_t *pchMessage, uint32_t dwLength) {
-    uint16_t wExpected = 0;
-    if ((pchMessage == 0) || (dwLength <= 2)) {
-        return 0;
+// static uint16_t CRC16_Check_Sum(uint8_t *pchMessage, uint32_t dwLength)
+// {
+//     uint16_t wExpected = 0;
+//     if ((pchMessage == 0) || (dwLength <= 2))
+//     {
+//         return 0;
+//     }
+//     wExpected = crc_16(pchMessage, dwLength - 2);
+//     return (((wExpected & 0xff) == pchMessage[dwLength - 2]) && (((wExpected >> 8) & 0xff) == pchMessage[dwLength - 1]));
+// }
+
+//和校验
+static uint8_t Sum_Check_Sum(uint8_t *pchMessage, uint16_t Length) {
+    uint8_t sum = 0;
+    for (uint16_t i = 0; i < Length; i++) {
+        sum += pchMessage[i];
     }
-    wExpected = crc_16(pchMessage, dwLength - 2);
-    return (((wExpected & 0xff) == pchMessage[dwLength - 2]) && (
-                ((wExpected >> 8) & 0xff) == pchMessage[dwLength - 1]));
+    return sum & 0xFF;
 }
 
 /*检验数据帧头*/
 static uint8_t protocol_heade_Check(protocol_rm_struct *pro, uint8_t *rx_buf) {
     if (rx_buf[0] == PROTOCOL_CMD_ID) {
         pro->header.sof = rx_buf[0];
-        if (CRC8_Check_Sum(&rx_buf[0], 4)) {
-            pro->header.data_length = (rx_buf[2] << 8) | rx_buf[1];
-            pro->header.crc_check = rx_buf[3];
-            pro->cmd_id = (rx_buf[5] << 8) | rx_buf[4];
-            return 1;
-        }
+        return 1;
     }
     return 0;
 }
@@ -64,49 +65,60 @@ static uint8_t protocol_heade_Check(protocol_rm_struct *pro, uint8_t *rx_buf) {
     此函数根据待发送的数据更新数据帧格式以及内容，实现数据的打包操作
     后续调用通信接口的发送函数发送tx_buf中的对应数据
 */
-void get_protocol_send_data(
-    float *tx_data, // 待发送的float数据
-    uint8_t *tx_buf, // 待发送的数据帧
-    uint16_t *tx_buf_len) // 待发送的数据帧长度
+/**
+ *
+ * @param tx_data 待发送的数据
+ * @param tx_buf 待发送的数据帧，包括包头之类的
+ * @param tx_buf_len 待发送的数据帧长度
+ */
+void get_protocol_send_data(Vision_Send_s *tx_data, // 待发送的数据
+                            uint8_t *tx_buf, // 待发送的数据帧
+                            uint16_t *tx_buf_len) // 待发送的数据帧长度
 {
-    static uint16_t crc16;
     static uint16_t data_len;
 
     /*帧头部分*/
     tx_buf[0] = PROTOCOL_CMD_ID;
-    tx_buf[1] = data_len & 0xff; // 低位在前
-    tx_buf[2] = (data_len >> 8) & 0xff; // 低位在前
-    tx_buf[3] = crc_8(&tx_buf[0], 3); // 获取CRC8校验位
-
-    /*float数据段*/
-    for (int i = 0; i < 4 * sizeof(tx_data); i++) {
-        tx_buf[i + 4] = ((uint8_t *) (&tx_data[i / 4]))[i % 4];
+    tx_buf[1] = tx_data->cmd_data_type; //数据类型id,比如云台位置数据,开火控制数据等等
+    switch (tx_data->cmd_data_type) {
+        case TX_GIMBAL_POSITION:
+            memcpy(tx_buf, &tx_data->gimbal_data, sizeof(tx_data->gimbal_data));
+            data_len = 2 + sizeof(tx_data->gimbal_data);
+            break;
+        default:
+            return;
     }
-
-    /*整包校验*/
-    crc16 = crc_16(&tx_buf[0], data_len + 6);
-    tx_buf[data_len + 6] = crc16 & 0xff;
-    tx_buf[data_len + 7] = (crc16 >> 8) & 0xff;
-
-    *tx_buf_len = data_len + 8;
+    tx_buf[data_len] = Sum_Check_Sum(tx_buf, data_len); //和校验,校验范围为包头+数据段
+    *tx_buf_len = data_len + 1; //数据帧长度为包头+数据段+校验码
 }
 
 /*
     此函数用于处理接收数据，
-    返回数据内容的id
+    可以返回数据内容的id
 */
 uint16_t get_protocol_info(uint8_t *rx_buf, // 接收到的原始数据
-                           uint8_t *rx_data) // 接收的float数据存储地址
+                           Vision_Recv_s *rx_data) // 接收的float数据存储地址
 {
     // 放在静态区,避免反复申请栈上空间
     static protocol_rm_struct pro;
-    static uint16_t date_length;
+    static Rx_Data_type_e command_data;
 
     if (protocol_heade_Check(&pro, rx_buf)) {
-        date_length = OFFSET_BYTE + pro.header.data_length;
-        if (CRC16_Check_Sum(&rx_buf[0], date_length)) {
-            memcpy(rx_data, rx_buf + 8, pro.header.data_length - 2);
-            return pro.cmd_id;
+        command_data = rx_buf[1];
+        switch (command_data) {
+            case RECEIVE_GIMBAL_POSITION:
+                rx_data->cmd_data_type = command_data;
+                if (rx_buf[2 + sizeof(rx_data->gimbal_data)] == Sum_Check_Sum(rx_buf, 2 + sizeof(rx_data->gimbal_data)))
+                    memcpy(&rx_data->gimbal_data, rx_buf + 2, sizeof(rx_data->gimbal_data));
+                break;
+            case RECEIVE_FIRE_CONTROL:
+                rx_data->cmd_data_type = command_data;
+                if (rx_buf[2 + sizeof(rx_data->fire_control_data)] == Sum_Check_Sum(
+                        rx_buf, 2 + sizeof(rx_data->fire_control_data)))
+                    memcpy(&rx_data->fire_control_data, rx_buf + 2, sizeof(rx_data->fire_control_data));
+                break;
+            default:
+                break;
         }
     }
     return 0;

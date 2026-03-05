@@ -235,10 +235,12 @@ void DJI_Motor_Control(void)
         const int16_t Set = (int16_t)PID_Ref; //CAN发送的设定值
         DJI_Instance->Control_Setting.Power_Estimate = power_calculate(Set, Measure.Speed);
         DJI_Instance->Control_Setting.Power_Output = Set;
-        //功率限制
+
+        //功率限制部分
         if (i != Idx - 1)
             continue;
         // power_limit();
+
         for (uint8_t k = 0; k < Idx; k++)
         {
             DJI_Instance = Instance_Group[k];

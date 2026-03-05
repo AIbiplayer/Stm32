@@ -27,7 +27,7 @@ void bsp_usb_receive_callback(uint8_t* buf, uint32_t len)
         LED_Green_Down;
         memcpy(g_usb_dev.rx_buffer, buf, len);
         g_usb_dev.rx_len = len;
-        g_usb_dev.rx_callback();
+        g_usb_dev.rx_callback(len);
         g_usb_dev.rx_flag = 1; // 触发应用层逻辑
     }
 

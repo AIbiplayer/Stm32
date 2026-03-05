@@ -134,8 +134,9 @@ typedef enum
 {
     TRACK_NONE = 0, ///< 无模式，履带朝上
     TRACK_EXTEND, ///< 延长，四个履带支撑
-    TRACK_ROTATE, ///< 履带选择
-    TRACK_UP ///<上坡模式
+    TRACK_ROTATE, ///< 履带旋转，保持与地面接触
+    TRACK_UP, ///<上坡模式
+    TRACK_DOWN ///< 下坡模式
 } Track_Mode_e; ///< 电机初始化
 
 #endif //MOTOR_DEF_H

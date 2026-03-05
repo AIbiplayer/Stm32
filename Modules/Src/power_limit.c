@@ -23,15 +23,16 @@
 #define I_2_ECD 819.2f//电流值转编码器值
 
 // static DJIMotorInstance *motor;
+
+float I0, I1;
+
 static float initial_I[16] = {0}; //电机的原始电流数据
 static float I_Limited[16] = {0}; //限制后的电流数据
 static float speed_rads[16] = {0}; //角速度，弧度制
 
 static float MaxPower = 45; //最大功率
 
-
 // static float I_feedback[16];
-
 
 #ifdef POWER_ATTENUATION
 static float initial_power[16] = {0}; //经过计算后得到的未限制的功率
@@ -53,10 +54,10 @@ static float Power_sum;//功率之和
 static float Power_Limited[16];//限制后的功率
 #endif
 
-static DJI_Motor_Instance* motor_instance[8]; //需要控制的电机注册到这里
+static DJI_Motor_Instance *motor_instance[8]; //需要控制的电机注册到这里
 static uint8_t idx = 0; //索引
 
-void PLMotor_Register(DJI_Motor_Instance* motor) //将需要控制功率的大疆电机注册到这里
+void PLMotor_Register(DJI_Motor_Instance *motor) //将需要控制功率的大疆电机注册到这里
 {
     motor_instance[idx++] = motor;
 }
@@ -67,14 +68,10 @@ static float att_factor_calculate(void) //计算功率衰减因数
 {
     power_positive_sum = 0; //正数功率之和
     power_negative_sum = 0; //负数功率之和
-    for (int i = 0; i < 4; i++)
-    {
-        if (initial_power[i] > 0)
-        {
+    for (int i = 0; i < 4; i++) {
+        if (initial_power[i] > 0) {
             power_positive_sum += initial_power[i];
-        }
-        else
-        {
+        } else {
             power_negative_sum += initial_power[i]; //发电电机的总负功率，即发电功率
         }
     }
@@ -87,17 +84,15 @@ static float att_factor_calculate(void) //计算功率衰减因数
 #endif
 //以下为公有函数
 
-void SetPowerMax(float _power_max)
-{
+void SetPowerMax(float _power_max) {
     MaxPower = _power_max;
 }
 
-float power_calculate(float I, float speed_rads)
-{
+float power_calculate(float I, float speed_rads) {
     I = I / 819.2f; //编码器电流值转化为真实电流值，单位A
     speed_rads = speed_rads * PI / 180;
-    return (float)(K0 + K1 * I + K2 * speed_rads + K3 * I * speed_rads +
-        K4 * I * I + K5 * speed_rads * speed_rads);
+    return (float) (K0 + K1 * I + K2 * speed_rads + K3 * I * speed_rads +
+                    K4 * I * I + K5 * speed_rads * speed_rads);
 }
 
 #ifdef POWER_ATTENUATION
@@ -106,27 +101,23 @@ float power_calculate(float I, float speed_rads)
  * @brief 限制功率（未完全完成）
  *
  */
-void power_limit()
-{
-    for (uint8_t i = 0; i < idx; i++)
-    {
+void power_limit() {
+    I0 = motor_instance[0]->Control_Setting.Power_Output;
+
+    for (uint8_t i = 0; i < idx; i++) {
         initial_I[i] = motor_instance[i]->Measure.Current / 819.2f;
-        speed_rads[i] = motor_instance[i]->Measure.Speed * PI / 180; //将度/秒转化为弧度/秒
-        // I_feedback[i] = motor_instance[i]->measure.real_current / 819.2f;
+        speed_rads[i] = (float) (motor_instance[i]->Measure.Speed) * PI / 180.0f; //将度/秒转化为弧度/秒
     }
 
-    for (uint8_t i = 0; i < idx; i++)
-    {
+    for (uint8_t i = 0; i < idx; i++) {
         initial_power[i] = motor_instance[i]->Control_Setting.Power_Estimate;
     }
     att_factor = att_factor_calculate();
     if (att_factor >= 1.0f)
         return;
     float a = 0, b = 0, c = 0;
-    for (uint8_t i = 0; i < idx; i++)
-    {
-        if (initial_power[i] <= 0)
-        {
+    for (uint8_t i = 0; i < idx; i++) {
+        if (initial_power[i] <= 0) {
             I_Limited[i] = initial_I[i];
             continue;
         }
@@ -136,8 +127,7 @@ void power_limit()
         c = K0 + K2 * speed_rads[i] + K5 * speed_rads[i] * speed_rads[i] - att_factor * initial_power[i];
         float delta_ = b * b - 4 * a * c;
         float delta_sqrt;
-        if (delta_ < 0.0f)
-        {
+        if (delta_ < 0.0f) {
             I_Limited[i] = 0; //无需功率控制
             continue;
         }
@@ -147,35 +137,25 @@ void power_limit()
         result_2 = (-b - delta_sqrt) / (2.0f * a);
 
         // 两个潜在的可行电流值, 取绝对值最小的那个
-        if ((result_1 > 0.0f && result_2 < 0.0f) || (result_1 < 0.0f && result_2 > 0.0f))
-        {
-            if ((initial_I[i] > 0.0f && result_1 > 0.0f) || (initial_I[i] < 0.0f && result_1 < 0.0f))
-            {
+        if ((result_1 > 0.0f && result_2 < 0.0f) || (result_1 < 0.0f && result_2 > 0.0f)) {
+            if ((initial_I[i] > 0.0f && result_1 > 0.0f) || (initial_I[i] < 0.0f && result_1 < 0.0f)) {
                 I_Limited[i] = result_1;
+            } else {
+                I_Limited[i] = result_2;
             }
-            else
-            {
+        } else {
+            if (fabsf(result_1) < fabsf(result_2)) {
+                I_Limited[i] = result_1;
+            } else {
                 I_Limited[i] = result_2;
             }
         }
-        else
-        {
-            if (fabsf(result_1) < fabsf(result_2))
-            {
-                I_Limited[i] = result_1;
-            }
-            else
-            {
-                I_Limited[i] = result_2;
-            }
-        }
-        // motor_instance[i]->set_current = I_Limited[i] * 819.2f;//将电流值A转化为编码器的值
     }
 
-    for (uint8_t i = 0; i < idx; i++)
-    {
+    for (uint8_t i = 0; i < idx; i++) {
         motor_instance[i]->Control_Setting.Power_Output = I_Limited[i] * 819.2f; //将电流值A转化为编码器的值
     }
+    I1 = motor_instance[0]->Control_Setting.Power_Output;
 }
 #endif
 
