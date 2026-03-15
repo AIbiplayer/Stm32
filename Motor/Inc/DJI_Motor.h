@@ -32,7 +32,7 @@ typedef struct
     uint8_t Temp; ///< 温度
 
     int32_t Total_Round; ///< 总圈数
-    int64_t Total_Angle; ///< 总角度值
+    float Total_Angle; ///< 总角度值
 
     uint8_t Block_CNT; ///< 堵转计数
     uint8_t Block_Flag; ///< 堵转标志

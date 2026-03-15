@@ -15,13 +15,11 @@
 
 static uint8_t Idx = 0; ///< 电机索引
 static bool Send_Enable_Flag[6]; ///< 六组电机发送标志位，哪一个为True说明哪一个可以发送
-static DJI_Motor_Instance* Instance_Group[DJI_MOTOR_CNT]; ///< 把所有电机实例放到一个组，之后统一进行PID计算，注意这里是指针类型
+static DJI_Motor_Instance *Instance_Group[DJI_MOTOR_CNT]; ///< 把所有电机实例放到一个组，之后统一进行PID计算，注意这里是指针类型
 
-static float STarget = 0.0f;
-
-extern DJI_Motor_Instance* Gimbal_Yaw; ///<Yaw轴电机
-extern DJI_Motor_Instance* Load_bullet;
-extern DJI_Motor_Instance* Gimbal_Pitch; ///<Pitch轴电机
+extern DJI_Motor_Instance *Gimbal_Yaw; ///<Yaw轴电机
+extern DJI_Motor_Instance *Load_bullet;
+extern DJI_Motor_Instance *Gimbal_Pitch; ///<Pitch轴电机
 
 /**
  * @brief 由于DJI电机发送以四个一组的形式进行,故对其进行特殊处理,用6个(2can*3group)can_instance专门负责发送
@@ -61,16 +59,16 @@ static CANInstance sender_assignment[6] = {
     },
 };
 
-static void Decode_DJI_Motor(CANInstance* Instance);
-static void Motor_Grouping(DJI_Motor_Instance* DJI_Motor, CAN_Init_Config_s* Config);
+static void Decode_DJI_Motor(CANInstance *Instance);
+
+static void Motor_Grouping(DJI_Motor_Instance *DJI_Motor, CAN_Init_Config_s *Config);
 
 /**
  * @brief 注册大疆电机实例
  * @return 电机实例指针
  */
-DJI_Motor_Instance* DJI_Motor_Init(Motor_Init_s* Motor_Init)
-{
-    DJI_Motor_Instance* Instance = (DJI_Motor_Instance*)malloc(sizeof(DJI_Motor_Instance)); //创建动态内存，便于创造实例
+DJI_Motor_Instance *DJI_Motor_Init(Motor_Init_s *Motor_Init) {
+    DJI_Motor_Instance *Instance = (DJI_Motor_Instance *) malloc(sizeof(DJI_Motor_Instance)); //创建动态内存，便于创造实例
     memset(Instance, 0, sizeof(DJI_Motor_Instance));
     Instance->Control_Setting = Motor_Init->Control_Setting; //将电机部分内容转移
     Instance->Motor_Type = Motor_Init->Motor_Type;
@@ -90,76 +88,67 @@ DJI_Motor_Instance* DJI_Motor_Init(Motor_Init_s* Motor_Init)
 /**
  * @brief 根据手册查找电机ID并对其分组，方便管理
  */
-static void Motor_Grouping(DJI_Motor_Instance* DJI_Motor, CAN_Init_Config_s* Config)
-{
+static void Motor_Grouping(DJI_Motor_Instance *DJI_Motor, CAN_Init_Config_s *Config) {
     const uint8_t Motor_ID = Config->tx_id - 1;
     uint8_t InGroup_ID;
     uint8_t Group;
 
-    switch (DJI_Motor->Motor_Type)
-    {
-    case M2006:
-        Group = 1; // M2006电机由CAN2发送
-        InGroup_ID = Motor_ID;
-        Config->rx_id = 0x200 + Motor_ID + 1;
-        Send_Enable_Flag[Group] = true;
-        DJI_Motor->Send_Group = Group;
-        DJI_Motor->Message_Num = InGroup_ID;
-        break;
-    case M3508:
-        if (Motor_ID < 4)
-        {
+    switch (DJI_Motor->Motor_Type) {
+        case M2006:
+            Group = 1; // M2006电机由CAN2发送
             InGroup_ID = Motor_ID;
-            Group = Config->can_handle == &hcan1 ? 1 : 4;
-        }
-        else
-        {
-            InGroup_ID = Motor_ID - 4;
-            Group = Config->can_handle == &hcan1 ? 2 : 5;
-        }
-        Config->rx_id = 0x200 + Motor_ID + 1;
-        Send_Enable_Flag[Group] = true;
-        DJI_Motor->Send_Group = Group;
-        DJI_Motor->Message_Num = InGroup_ID;
-        break;
-    case GM6020:
-        if (Motor_ID < 4)
-        {
-            InGroup_ID = Motor_ID;
-            Group = Config->can_handle == &hcan1 ? 0 : 3;
-        }
-        else
-        {
-            InGroup_ID = Motor_ID - 4;
-            Group = Config->can_handle == &hcan1 ? 2 : 5;
-        }
-        Config->rx_id = 0x204 + Motor_ID + 1;
-        Send_Enable_Flag[Group] = true;
-        DJI_Motor->Send_Group = Group;
-        DJI_Motor->Message_Num = InGroup_ID;
-        break;
-    default:
-        break;
+            Config->rx_id = 0x200 + Motor_ID + 1;
+            Send_Enable_Flag[Group] = true;
+            DJI_Motor->Send_Group = Group;
+            DJI_Motor->Message_Num = InGroup_ID;
+            break;
+        case M3508:
+            if (Motor_ID < 4) {
+                InGroup_ID = Motor_ID;
+                Group = Config->can_handle == &hcan1 ? 1 : 4;
+            } else {
+                InGroup_ID = Motor_ID - 4;
+                Group = Config->can_handle == &hcan1 ? 2 : 5;
+            }
+            Config->rx_id = 0x200 + Motor_ID + 1;
+            Send_Enable_Flag[Group] = true;
+            DJI_Motor->Send_Group = Group;
+            DJI_Motor->Message_Num = InGroup_ID;
+            break;
+        case GM6020:
+            if (Motor_ID < 4) {
+                InGroup_ID = Motor_ID;
+                Group = Config->can_handle == &hcan1 ? 0 : 3;
+            } else {
+                InGroup_ID = Motor_ID - 4;
+                Group = Config->can_handle == &hcan1 ? 2 : 5;
+            }
+            Config->rx_id = 0x204 + Motor_ID + 1;
+            Send_Enable_Flag[Group] = true;
+            DJI_Motor->Send_Group = Group;
+            DJI_Motor->Message_Num = InGroup_ID;
+            break;
+        default:
+            break;
     }
 }
 
 /**
  * @brief 大疆电机解析数据
  */
-static void Decode_DJI_Motor(CANInstance* Instance)
-{
+static void Decode_DJI_Motor(CANInstance *Instance) {
     /*这里将Instance的ID强转为DJI_Motor，是为了将CANInstance特有的功能拼接给DJI_Motor
      *可以把CANInstance理解为拓展拼图，其中的void*为拼图上凸起的接口*/
-    const uint8_t* Rx_Buff = Instance->rx_buff;
-    DJI_Motor_Instance* DJI_Instance = (DJI_Motor_Instance*)Instance->id;
-    DJI_Motor_Measure_s* Measure = &DJI_Instance->Measure;
+    const uint8_t *Rx_Buff = Instance->rx_buff;
+    DJI_Motor_Instance *DJI_Instance = (DJI_Motor_Instance *) Instance->id;
+    DJI_Motor_Measure_s *Measure = &DJI_Instance->Measure;
 
     Measure->Last_Ecd = Measure->Ecd;
-    Measure->Ecd = (uint16_t)Rx_Buff[0] << 8 | Rx_Buff[1];
-    Measure->Angle = ((float)Measure->Ecd * ECD_ANGLE_COEF_DJI);
-    Measure->Speed = (int16_t)(Rx_Buff[2] << 8 | Rx_Buff[3]);
+    Measure->Ecd = (uint16_t) Rx_Buff[0] << 8 | Rx_Buff[1];
+    Measure->Angle = ((float) Measure->Ecd * ECD_ANGLE_COEF_DJI);
+    Measure->Speed = (int16_t) (Rx_Buff[2] << 8 | Rx_Buff[3]);
     Measure->Current = (1.0f - CURRENT_SMOOTH_COEF) * Measure->Current +
-        CURRENT_SMOOTH_COEF * (float)((int16_t)(Rx_Buff[4] << 8 | Rx_Buff[5]));
+                       CURRENT_SMOOTH_COEF * (float) ((int16_t) (Rx_Buff[4] << 8 | Rx_Buff[5]));
     Measure->Temp = Rx_Buff[6];
 
     if (DJI_Instance == Gimbal_Yaw || DJI_Instance == Load_bullet) //yaw/拨盘 电机多圈记录
@@ -168,14 +157,14 @@ static void Decode_DJI_Motor(CANInstance* Instance)
             Measure->Total_Round--;
         else if (Measure->Ecd - Measure->Last_Ecd < -4096)
             Measure->Total_Round++;
-        Measure->Total_Angle = Measure->Total_Round * 360 + (int32_t)(Measure->Angle);
+        Measure->Total_Angle = Measure->Total_Round * 360.0f + (Measure->Angle);
     }
 
     if (DJI_Instance == Gimbal_Pitch) //pitch重力补偿
     {
-        Measure->Total_Angle = (Measure->Ecd - PITCH_HORIZON_ECD) * ECD_ANGLE_COEF_DJI;
+        Measure->Total_Angle = ((float) (Measure->Ecd - PITCH_HORIZON_ECD) * ECD_ANGLE_COEF_DJI);
         Measure->gravity_compensate = (Gimbal_Pitch_gravity * cosf(Measure->Total_Angle)) /
-            Torque_Constant_6020;
+                                      Torque_Constant_6020;
     }
 }
 
@@ -183,56 +172,53 @@ static void Decode_DJI_Motor(CANInstance* Instance)
  * @brief 对大疆电机进行控制并发送CAN
  * @todo 增加前馈
  */
-void DJI_Motor_Control(void)
-{
+void DJI_Motor_Control(void) {
     //对已注册的电机进行控制
-    for (uint8_t i = 0; i < Idx; i++)
-    {
-        DJI_Motor_Instance* DJI_Instance = Instance_Group[i]; //使用指针提取电机实例
-        Motor_Control_Setting_s Control_Setting = DJI_Instance->Control_Setting;
+    for (uint8_t i = 0; i < Idx; i++) {
+        DJI_Motor_Instance *DJI_Instance = Instance_Group[i]; //使用指针提取电机实例
+        // Motor_DJI_Instance->Control_Setting_s DJI_Instance->Control_Setting = DJI_Instance->DJI_Instance->Control_Setting;
         const DJI_Motor_Measure_s Measure = DJI_Instance->Measure; //电机测量值
-        float PID_Ref = Control_Setting.Target; //PID参考值
+        float PID_Ref = DJI_Instance->Control_Setting.Target; //PID参考值
         float PID_Measure_Speed = 0.0f; //PID速度测量值
         float PID_Measure_Angle = 0.0f; //PID角度测量值
 
-        if (Control_Setting.Reverse_Flag == MOTOR_REVERSE) //判断取反
+        if (DJI_Instance->Control_Setting.Reverse_Flag == MOTOR_REVERSE) //判断取反
             PID_Ref *= -1;
 
-        PID_Measure_Speed = Control_Setting.Speed_Feedback_Source == OTHER_FEEDBACK
-                            && Control_Setting.Other_Speed_Feedback_Ptr != NULL
-                                ? *Control_Setting.Other_Speed_Feedback_Ptr
-                                : (float)Measure.Speed;
+        PID_Measure_Speed = DJI_Instance->Control_Setting.Speed_Feedback_Source == OTHER_FEEDBACK
+                            && DJI_Instance->Control_Setting.Other_Speed_Feedback_Ptr != NULL
+                                ? *DJI_Instance->Control_Setting.Other_Speed_Feedback_Ptr * RADS_2_RPM
+                                : (float) Measure.Speed;
 
-        PID_Measure_Angle = Control_Setting.Angle_Feedback_Source == OTHER_FEEDBACK
-                            && Control_Setting.Other_Angle_Feedback_Ptr != NULL
-                                ? *Control_Setting.Other_Angle_Feedback_Ptr
-                                : (float)Measure.Total_Angle;
+        PID_Measure_Angle = DJI_Instance->Control_Setting.Angle_Feedback_Source == OTHER_FEEDBACK
+                            && DJI_Instance->Control_Setting.Other_Angle_Feedback_Ptr != NULL
+                                ? *DJI_Instance->Control_Setting.Other_Angle_Feedback_Ptr
+                                : (float) Measure.Total_Angle;
 
-        switch (Control_Setting.Loop_Control) // 按闭环控制类型进行控制
+        switch (DJI_Instance->Control_Setting.Loop_Control) // 按闭环控制类型进行控制
         {
-        case SPEED_CONTROL:
-            STarget = PID_Ref;
-            PID_Ref = PID_Calculate(&Control_Setting.Speed_PID, PID_Ref, PID_Measure_Speed);
-            break;
-        case ANGLE_CONTROL:
-            PID_Ref = PID_Calculate(&Control_Setting.Angle_PID, PID_Ref, PID_Measure_Angle);
-            break;
-        case ANGLE_SPEED_CONTROL:
-            PID_Ref = PID_Calculate(&Control_Setting.Angle_PID, PID_Ref, PID_Measure_Angle);
-            PID_Ref = PID_Calculate(&Control_Setting.Speed_PID, PID_Ref, PID_Measure_Speed);
-            break;
-        case SPEED_ANGLE_CONTROL:
-            PID_Ref = PID_Calculate(&Control_Setting.Speed_PID, PID_Ref, PID_Measure_Speed);
-            PID_Ref = PID_Calculate(&Control_Setting.Angle_PID, PID_Ref, PID_Measure_Angle);
-            break;
-        default: break;
+            case SPEED_CONTROL:
+                PID_Ref = PID_Calculate(&DJI_Instance->Control_Setting.Speed_PID, PID_Ref, PID_Measure_Speed);
+                break;
+            case ANGLE_CONTROL:
+                PID_Ref = PID_Calculate(&DJI_Instance->Control_Setting.Angle_PID, PID_Ref, PID_Measure_Angle);
+                break;
+            case ANGLE_SPEED_CONTROL:
+                PID_Ref = PID_Calculate(&DJI_Instance->Control_Setting.Angle_PID, PID_Ref, PID_Measure_Angle);
+                PID_Ref = PID_Calculate(&DJI_Instance->Control_Setting.Speed_PID, PID_Ref, PID_Measure_Speed);
+                break;
+            case SPEED_ANGLE_CONTROL:
+                PID_Ref = PID_Calculate(&DJI_Instance->Control_Setting.Speed_PID, PID_Ref, PID_Measure_Speed);
+                PID_Ref = PID_Calculate(&DJI_Instance->Control_Setting.Angle_PID, PID_Ref, PID_Measure_Angle);
+                break;
+            default: break;
         }
-        PID_Ref = Control_Setting.Feedforward_Flag == CURRENT_FEEDFORWARD
-                      && Control_Setting.Feedforward_Ptr != NULL
-                          ? PID_Ref + *Control_Setting.Feedforward_Ptr
-                          : PID_Ref;
+        PID_Ref = DJI_Instance->Control_Setting.Feedforward_Flag == CURRENT_FEEDFORWARD
+                  && DJI_Instance->Control_Setting.Feedforward_Ptr != NULL
+                      ? PID_Ref + *DJI_Instance->Control_Setting.Feedforward_Ptr
+                      : PID_Ref;
 
-        const int16_t Set = (int16_t)PID_Ref; //CAN发送的设定值
+        const int16_t Set = (int16_t) PID_Ref; //CAN发送的设定值
         DJI_Instance->Control_Setting.Power_Estimate = power_calculate(Set, Measure.Speed);
         DJI_Instance->Control_Setting.Power_Output = Set;
 
@@ -241,23 +227,21 @@ void DJI_Motor_Control(void)
             continue;
         // power_limit();
 
-        for (uint8_t k = 0; k < Idx; k++)
-        {
+        for (uint8_t k = 0; k < Idx; k++) {
             DJI_Instance = Instance_Group[k];
-            Control_Setting = DJI_Instance->Control_Setting;
+            // DJI_Instance->Control_Setting = DJI_Instance->DJI_Instance->Control_Setting;
             const uint8_t Group = DJI_Instance->Send_Group;
             const uint8_t InGroup_ID = DJI_Instance->Message_Num;
 
-            sender_assignment[Group].tx_buff[2 * InGroup_ID] = (uint8_t)(Control_Setting.Power_Output >> 8); //高八位
-            sender_assignment[Group].tx_buff[2 * InGroup_ID + 1] = (uint8_t)Control_Setting.Power_Output; //低八位
+            sender_assignment[Group].tx_buff[2 * InGroup_ID] = (uint8_t) (DJI_Instance->Control_Setting.Power_Output >> 8); //高八位
+            sender_assignment[Group].tx_buff[2 * InGroup_ID + 1] = (uint8_t) DJI_Instance->Control_Setting.Power_Output; //低八位
 
             if (DJI_Instance->Working_Type == MOTOR_STOP)
                 memset(sender_assignment[Group].tx_buff + 2 * InGroup_ID, 0, 16u);
         }
     }
 
-    for (uint8_t i = 0; i < 6; i++)
-    {
+    for (uint8_t i = 0; i < 6; i++) {
         if (Send_Enable_Flag[i])
             CANTransmit(&sender_assignment[i], 1);
     }
@@ -266,24 +250,21 @@ void DJI_Motor_Control(void)
 /**
  * @brief 电机停止
  */
-void DJI_MotorStop(DJI_Motor_Instance* motor)
-{
+void DJI_MotorStop(DJI_Motor_Instance *motor) {
     motor->Working_Type = MOTOR_STOP;
 }
 
 /**
  * @brief 电机启动
  */
-void DJI_MotorEnable(DJI_Motor_Instance* motor)
-{
+void DJI_MotorEnable(DJI_Motor_Instance *motor) {
     motor->Working_Type = MOTOR_ENABLE;
 }
 
 /**
  * @brief 修改电机控制环
  */
-void DJI_MotorChangeLoop(DJI_Motor_Instance* motor, const Motor_Loop_Control_Type_e Loop)
-{
+void DJI_MotorChangeLoop(DJI_Motor_Instance *motor, const Motor_Loop_Control_Type_e Loop) {
     motor->Control_Setting.Loop_Control = Loop;
     PID_Clean_I(&motor->Control_Setting.Angle_PID);
     PID_Clean_I(&motor->Control_Setting.Speed_PID);
@@ -292,24 +273,21 @@ void DJI_MotorChangeLoop(DJI_Motor_Instance* motor, const Motor_Loop_Control_Typ
 /**
  * @brief 改变电机旋转方向
  */
-void DJI_MotorChangeReverse(DJI_Motor_Instance* motor, const Motor_Reverse_Flag_e motor_reverse_flag)
-{
+void DJI_MotorChangeReverse(DJI_Motor_Instance *motor, const Motor_Reverse_Flag_e motor_reverse_flag) {
     motor->Control_Setting.Reverse_Flag = motor_reverse_flag;
 }
 
 /**
  * @brief 设置PID目标值
  */
-void DJI_MotorSetTarget(DJI_Motor_Instance* motor, const float Target_)
-{
+void DJI_MotorSetTarget(DJI_Motor_Instance *motor, const float Target_) {
     motor->Control_Setting.Target = Target_;
 }
 
 /**
  * @brief 角度限制
  */
-float Angle_limit(float angle, float max, float min)
-{
+float Angle_limit(float angle, float max, float min) {
     angle = angle > max ? max : angle;
     angle = angle < min ? min : angle;
     return angle;

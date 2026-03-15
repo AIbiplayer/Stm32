@@ -117,8 +117,8 @@ void CmdTask(void *argument) {
         DM_count++;
         DM_count >= 15 ? (DM_Motor_Control(), DM_count = 0) : 0; // 达妙电机控制频率为30ms
 
-        SuperCap_count++;
-        SuperCap_count >= 250 ? (SuperCapSend(cap, 45, 60, 80)) : 0; // 超级电容控制频率为500ms,根据裁判系统等级调整功率限制
+        // SuperCap_count++;
+        // SuperCap_count >= 250 ? (SuperCapSend(cap, 45, 60, 0.9f)) : 0; // 超级电容控制频率为500ms,根据裁判系统等级调整功率限制
 
         Timeout_flag == 1 ? RefereeLostCallback() : 0; // 遥控器信号丢失则调用裁判系统丢失回调函数
 
@@ -182,7 +182,6 @@ static void Robot_Cmd_Init(void) {
     };
     cap = SuperCapInit(&cap_conf); // 超级电容初始化
 
-
 #endif
     Timeout = DWT_GetTimeline_ms(); // 超时同时判断图传和裁判系统是否失灵
     CANCOM = CANCommInit(&TMC_CANComm_Config);
@@ -202,32 +201,34 @@ static void Robot_Cmd_Init(void) {
  * @brief 根据gimbal app传回的当前电机角度计算和零位的误差
  *        单圈绝对角度的范围是0~360,说明文档中有图示
  */
-static void CalcOffsetAngle(void) //计算偏移角度角度范围0-360
+static void CalcOffsetAngle(void)
 {
     static float angle;
-    angle = gimbal_fetch_data.yaw_motor_single_round_angle; // 从云台获取的当前yaw电机单圈角度
-    if (angle > YAW_ALIGN_ANGLE)
-        chassis_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE;
-    else if (angle <= YAW_ALIGN_ANGLE && angle >= YAW_ALIGN_ANGLE - 180.0f)
-        chassis_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE + 360.0f;
-    else
-        chassis_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE + 360.0f;
+    angle = gimbal_fetch_data.yaw_motor_single_round_angle;
 
-    if (chassis_cmd_send.offset_angle > 180.0f && chassis_cmd_send.offset_angle <= 360.0f)
+    // 计算 offset_angle (0~360度)
+    chassis_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE;
+    if (chassis_cmd_send.offset_angle < 0)
+        chassis_cmd_send.offset_angle += 360.0f;
+
+    // 转换为 -180~180 度，方便PID控制
+    if (chassis_cmd_send.offset_angle > 180.0f)
         chassis_cmd_send.angle_offset_c = chassis_cmd_send.offset_angle - 360.0f;
     else
         chassis_cmd_send.angle_offset_c = chassis_cmd_send.offset_angle;
-    gimbal_cmd_send.angle_offset_g = chassis_cmd_send.angle_offset_c; //统一角度差
+
+    gimbal_cmd_send.angle_offset_g = chassis_cmd_send.angle_offset_c;
 }
 
 /**
  * @brief 命令解析
+ * @todo 紧急停止，键盘控制，遥控器控制三种模式的切换还没完成
  */
 static void Robot_Cmd_Serve(void) {
     // 左右两杆均拨下，紧急断电
     chassis_cmd_send.chassis_last_mode = chassis_cmd_send.chassis_mode;
     if ((switch_is_down(RC_data[TEMP].rc.switch_left) && switch_is_down(RC_data[TEMP].rc.switch_right)) ||
-        Timeout_flag) {
+        Timeout_flag || VL_data[TEMP].rc.mode_sw == 2) {
         Emergency_Stop();
         return;
     }
@@ -236,7 +237,7 @@ static void Robot_Cmd_Serve(void) {
     LED_Red_Down;
 
     // 左右拨杆均拨上，键盘控制,否则遥控器控制
-    if (switch_is_up(RC_data[TEMP].rc.switch_left) && switch_is_up(RC_data[TEMP].rc.switch_right))
+    if ((switch_is_up(RC_data[TEMP].rc.switch_left) && switch_is_up(RC_data[TEMP].rc.switch_right)))
         Keyboard_Cmd();
     else
         RemoteControl_Cmd();
@@ -308,7 +309,7 @@ static void Keyboard_Cmd(void) {
         gimbal_cmd_send.gimbal_mode = GIMBAL_VISION; //只做头部跟随
         gimbal_cmd_send.yaw = vision_recv_data->gimbal_data.yaw;
         gimbal_cmd_send.pitch = vision_recv_data->gimbal_data.pitch;
-        gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, 20.0f, -35.0f);
+        gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, 13.0f, -35.0f);
 
         shoot_cmd_send.friction_mode = vision_recv_data->fire_control_data.friction_flag;
         shoot_cmd_send.load_mode = vision_recv_data->fire_control_data.fire_mode_flag;
@@ -323,7 +324,7 @@ static void Keyboard_Cmd(void) {
         gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
         gimbal_cmd_send.yaw -= (float) VL_data[TEMP].mouse.x / 660 * 2.4f; //3.5
         gimbal_cmd_send.pitch += (float) VL_data[TEMP].mouse.y / 660 * 1.3f; //-2.5
-        gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, 20.0f, -35.0f);
+        gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, 13.0f, -35.0f);
     }
 
     switch (VL_data[TEMP].key_count[KEY_PRESS][Key_F] % 2) // F键开关摩擦轮，不受自瞄模式影响
@@ -392,8 +393,7 @@ static void Keyboard_Cmd(void) {
             if (Gimbal_Rec->CH_Pitch < -7 && flag == 3) // 上台阶过程中如果云台俯角再次大于7度，认为上完台阶，收回履带
                 flag = 4;
 
-            chassis_cmd_send.a_track_head += RC_data[TEMP].key[KEY_PRESS].q ? 0.2f : 0.0f;
-            chassis_cmd_send.a_track_head -= RC_data[TEMP].key[KEY_PRESS].e ? 0.2f : 0.0f;
+            chassis_cmd_send.a_track_head += (float) VL_data[TEMP].mouse.z / 660 * 1.5f; // 鼠标滚轮控制上台阶角度微调
             chassis_cmd_send.a_track_head = Angle_limit(chassis_cmd_send.a_track_head, 150, 40.0f);
             chassis_cmd_send.a_track_back += PID_Calculate(&UPPID, 0.0f, Gimbal_Rec->CH_Pitch);
             chassis_cmd_send.a_track_back = Angle_limit(chassis_cmd_send.a_track_back, MAX_ANGLE_TRACK, 105.0f);
@@ -428,7 +428,7 @@ static void RemoteControl_Cmd(void) {
         : (shoot_cmd_send.friction_mode = FRICTION_OFF);
     if (RC_data[TEMP].rc.dial > 500) {
         shoot_cmd_send.load_mode = LOAD_BURSTFIRE; //连发
-        shoot_cmd_send.shoot_rate = 10.0f; //单位Hz
+        shoot_cmd_send.shoot_rate = 15.0f; //单位Hz
     } else if (RC_data[TEMP].rc.dial < -500)
         shoot_cmd_send.load_mode = LOAD_1_BULLET; //单发
     else
@@ -523,17 +523,17 @@ static void RemoteControl_Cmd(void) {
     if (gimbal_cmd_send.gimbal_mode == GIMBAL_GYRO_MODE) {
         gimbal_cmd_send.yaw -= 0.0008f * (float) RC_data[TEMP].rc.rocker_r_;
         gimbal_cmd_send.pitch -= 0.0006f * (float) RC_data[TEMP].rc.rocker_r1;
-        gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, 20.0f, -35.0f);
+        gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, 13.0f, -35.0f);
     }
     // 视觉模式
     else if (gimbal_cmd_send.gimbal_mode == GIMBAL_VISION) {
         gimbal_cmd_send.yaw = vision_recv_data->gimbal_data.yaw;
         gimbal_cmd_send.pitch = vision_recv_data->gimbal_data.pitch;
-        gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, 20.0f, -35.0f);
+        gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, 13.0f, -35.0f);
     }
     // 平移速度设置
-    chassis_cmd_send.vy = (float) RC_data[TEMP].rc.rocker_l1 * 0.151f * 30.0f; // 最高3m/s
+    chassis_cmd_send.vy = (float) RC_data[TEMP].rc.rocker_l1 * 0.151f * 35.0f; // 最高3.5m/s
     chassis_cmd_send.chassis_mode == CHASSIS_INDEPENDENCE
         ? (chassis_cmd_send.wz = (float) RC_data[TEMP].rc.rocker_l_ * 0.00151f * 1.0f) // 最高1转/s
-        : (chassis_cmd_send.vx = -(float) RC_data[TEMP].rc.rocker_l_ * 0.151f * 30.0f); // 最高3m/s
+        : (chassis_cmd_send.vx = -(float) RC_data[TEMP].rc.rocker_l_ * 0.151f * 35.0f); // 最高3.5m/s
 }

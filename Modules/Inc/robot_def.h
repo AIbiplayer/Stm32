@@ -20,9 +20,9 @@
 
 // 云台参数
 #define YAW_ALIGN_ANGLE (YAW_CHASSIS_ALIGN_ECD * ECD_ANGLE_COEF_DJI) // 对齐时的角度,0-360
-#define YAW_CHASSIS_ALIGN_ECD 6172  // 云台和底盘对齐指向相同方向时的电机编码器值,若对云台有机械改动需要修改
+#define YAW_CHASSIS_ALIGN_ECD 7190// 云台和底盘对齐指向相同方向时的电机编码器值,若对云台有机械改动需要修改
 #define YAW_ECD_GREATER_THAN_4096 0 // ALIGN_ECD值是否大于4096,是为1,否为0;用于计算云台偏转角度
-#define PITCH_HORIZON_ECD 6737.0      // 云台处于水平位置时编码器值,若对云台有机械改动需要修改
+#define PITCH_HORIZON_ECD 2304      // 云台处于水平位置时编码器值,若对云台有机械改动需要修改
 #define PITCH_MAX_ANGLE 20.90f           // 云台竖直方向最大角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
 #define PITCH_MIN_ANGLE -23.00f           // 云台竖直方向最小角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
 // 发射参数
@@ -62,59 +62,59 @@
 #define HEAT_OF_PROJECTILE 10//单发弹丸的热量(由2026赛季RM规则决定)
 
 // 爆发优先热量打表
-static const float booster_burst_first_heat_max[10] = {
-    170.0f,
-    180.0f,
-    190.0f,
-    200.0f,
-    210.0f,
-    220.0f,
-    230.0f,
-    240.0f,
-    250.0f,
-    260.0f,
+static const uint16_t booster_burst_first_heat_max[10] = {
+    170,
+    180,
+    190,
+    200,
+    210,
+    220,
+    230,
+    240,
+    250,
+    260,
 };
 
 // 爆发优先冷却打表
-static const float booster_burst_first_heat_cd[10] = {
-    5.0f,
-    7.0f,
-    9.0f,
-    11.0f,
-    12.0f,
-    13.0f,
-    14.0f,
-    16.0f,
-    18.0f,
-    20.0f,
+static const uint8_t booster_burst_first_heat_cd[10] = {
+    5,
+    7,
+    9,
+    11,
+    12,
+    13,
+    14,
+    16,
+    18,
+    20,
 };
 
 // 冷却优先热量打表
-static const float booster_cd_first_heat_max[10] = {
-    40.0f,
-    48.0f,
-    56.0f,
-    64.0f,
-    72.0f,
-    80.0f,
-    88.0f,
-    96.0f,
-    114.0f,
-    120.0f,
+static const uint8_t booster_cd_first_heat_max[10] = {
+    40,
+    48,
+    56,
+    64,
+    72,
+    80,
+    88,
+    96,
+    114,
+    120,
 };
 
 // 冷却优先冷却打表
-static const float booster_cd_first_heat_cd[10] = {
-    12.0f,
-    14.0f,
-    16.0f,
-    18.0f,
-    20.0f,
-    22.0f,
-    24.0f,
-    26.0f,
-    28.0f,
-    30.0f,
+static const uint8_t booster_cd_first_heat_cd[10] = {
+    12,
+    14,
+    16,
+    18,
+    20,
+    22,
+    24,
+    26,
+    28,
+    30,
 };
 
 typedef enum {
@@ -250,7 +250,7 @@ typedef struct {
     uint16_t heat; // 枪口热量
     uint16_t shooter_heat_limit; // 枪口热量上限
     uint8_t shooter_barrel_cooling_value; // 枪管冷却值
-    uint8_t robot_level: 7; // 机器人等级
+    int8_t robot_level: 7; // 机器人等级
     uint8_t reference_online_state: 1; // 参考数据在线状态
 } Shoot_Upload_Data_s;
 

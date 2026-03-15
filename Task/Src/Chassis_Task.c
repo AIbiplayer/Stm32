@@ -18,7 +18,7 @@
 #include "super_cap.h"
 #include "can_comm.h"
 
-#define SPEED_FILTER 0.4f // 轮子速度滤波系数，越大越平滑，但响应越慢
+#define SPEED_FILTER 0.9f // 轮子速度滤波系数，越大越平滑，但响应越慢
 
 #ifdef MCU_CHASSIS
 
@@ -29,11 +29,12 @@ CCMRAM static DJI_Motor_Instance *Mec_Wheel[4];
 CCMRAM static DM_Motor_Instance *Track_Wheel[4];
 CCMRAM static Chassis_Ctrl_Cmd_s chassis_cmd_recv; // 底盘接收到的控制命令
 CCMRAM static Chassis_Upload_Data_s chassis_feedback_data; // 底盘回传的反馈数据
-CCMRAM static PID_Typedef WZ_ROTATE_PID, WZ_FOLLOW_PID;
+CCMRAM static PID_Typedef WZ_ROTATE_PID, WZ_FOLLOW_PID_ANGLE; // 旋转控制PID和跟随控制PID
 
 CCMRAM static TMC_To_Chassis_s *Chassis_Data; // 底盘与云台数据结构体实例
 Track_Mode_e Chassis_Track_Mode; ///< 底盘履带模式
 extern CANCommInstance *CANCOM;
+extern INS_t INS;
 
 static void Chassis_Init(void);
 
@@ -43,7 +44,8 @@ static void Chassis_Status_Serve(void);
 
 static void Speed_Calculate(void);
 
-int16_t Speed1, Speed2, Speed3, Speed4;
+float AKP = 0, AKD = 0, AKI = 0;
+float AA, AD, APO, ADO, AIO;
 
 /**
  * @brief 底盘FreeRTOS任务
@@ -54,12 +56,19 @@ void ChassisTask(void *argument) {
     taskEXIT_CRITICAL();
     for (;;) {
         Speed_Calculate();
+        //
+        // WZ_FOLLOW_PID_ANGLE.Kp = AKP;
+        // WZ_FOLLOW_PID_ANGLE.Kd = AKD;
+        // WZ_FOLLOW_PID_ANGLE.Ki = AKI;
+        // AA = WZ_FOLLOW_PID_ANGLE.Actual;
+        // WZ_FOLLOW_PID_ANGLE.Dead_Zone = AD;
+        // APO = WZ_FOLLOW_PID_ANGLE.POut;
+        // ADO = WZ_FOLLOW_PID_ANGLE.Dout;
+        // AIO = WZ_FOLLOW_PID_ANGLE.IOut;
+
         Chassis_Status_Serve();
         Chassis_Output();
-        Speed1 = Mec_Wheel[0]->Measure.Speed;
-        Speed2 = Mec_Wheel[1]->Measure.Speed;
-        Speed3 = Mec_Wheel[2]->Measure.Speed;
-        Speed4 = Mec_Wheel[3]->Measure.Speed;
+
         osDelay(1);
     }
 }
@@ -94,7 +103,7 @@ static void Chassis_Init(void) {
               1,
               0,
               500,
-              8000);
+              14000);
 
     Mec_Chassis.Can_Init_Config.tx_id = 1;
     Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
@@ -157,8 +166,8 @@ static void Chassis_Init(void) {
 
     PID_Param(&WZ_ROTATE_PID, 5.0f, 0.0f, 1.5f, Integral_Limit | Derivative_On_Measurement,
               1.0f, 0.0f, 0.5f, 0.5f); // 最高0.5转/秒
-    PID_Param(&WZ_FOLLOW_PID, 2.7f, 0.0f, 2.2f, Integral_Limit | Derivative_On_Measurement | OutputFilter,
-              0.9f, 0.0f, 20, 0.5f); // 最高0.5转/秒
+    PID_Param(&WZ_FOLLOW_PID_ANGLE, 0.03f, 0.0f, 15.0f, Integral_Limit | Derivative_On_Measurement | OutputFilter,
+              0.9f, 2.0f, 20, 0.5f); // 最高0.5转/秒
 
     Chassis_Data = (TMC_To_Chassis_s *) CANCommGet(CANCOM);
 }
@@ -181,15 +190,12 @@ static void Speed_Calculate(void) {
             PID_Clean_I(&WZ_ROTATE_PID);
             chassis_vx = chassis_cmd_recv.vy * cos_theta - chassis_cmd_recv.vx * sin_theta;
             chassis_vy = chassis_cmd_recv.vy * sin_theta + chassis_cmd_recv.vx * cos_theta;
+            chassis_vw = PID_Calculate(&WZ_FOLLOW_PID_ANGLE, 0, chassis_cmd_recv.angle_offset_c);
 
-            if (fabsf(chassis_cmd_recv.angle_offset_c) >= 7.0f)
-                chassis_vw = PID_Calculate(&WZ_FOLLOW_PID, 0, chassis_cmd_recv.angle_offset_c);
-            else
-                chassis_vw = 0;
             break;
         }
         case CHASSIS_ROTATE: {
-            PID_Clean_I(&WZ_FOLLOW_PID);
+            PID_Clean_I(&WZ_FOLLOW_PID_ANGLE);
             chassis_vw = PID_Calculate(&WZ_ROTATE_PID, 0.1f, 0);
             chassis_vx = chassis_cmd_recv.vy * cos_theta - chassis_cmd_recv.vx * sin_theta;
             chassis_vy = chassis_cmd_recv.vy * sin_theta + chassis_cmd_recv.vx * cos_theta;
@@ -197,7 +203,7 @@ static void Speed_Calculate(void) {
         }
         case CHASSIS_INDEPENDENCE: {
             PID_Clean_I(&WZ_ROTATE_PID);
-            PID_Clean_I(&WZ_FOLLOW_PID);
+            PID_Clean_I(&WZ_FOLLOW_PID_ANGLE);
             chassis_vx = chassis_cmd_recv.vy;
             break;
         }

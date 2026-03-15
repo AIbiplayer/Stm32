@@ -108,15 +108,24 @@ static void Shoot_Init(void) {
         .Working_Type = MOTOR_ENABLE
     };
     PID_Param(&Load.Control_Setting.Speed_PID,
-              21,
+              18,
               0,
               1,
               Integral_Limit | Derivative_On_Measurement,
               1,
               100,
               1000,
-              8000);
+              14000);
     PID_Param(&Load.Control_Setting.Angle_PID,
+              10,
+              0,
+              0,
+              Integral_Limit | Derivative_On_Measurement,
+              1,
+              100,
+              1000,
+              14000);
+    PID_Param(&Friction.Control_Setting.Speed_PID,
               8,
               0,
               0,
@@ -124,16 +133,7 @@ static void Shoot_Init(void) {
               1,
               100,
               1000,
-              8000);
-    PID_Param(&Friction.Control_Setting.Speed_PID,
-              5,
-              0,
-              0,
-              Integral_Limit | Derivative_On_Measurement,
-              1,
-              100,
-              1000,
-              8000);
+              14000);
 
     Load.Can_Init_Config.tx_id = 1;
     Load.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
@@ -171,12 +171,14 @@ static void Shoot_Status_Serve(void) {
         // 裁判系统掉线或远端信息不可信
         if (shooter_type == Robot_Booster_Type_BURST) {
             //爆发优先模式
-            heat_limit_max = booster_burst_first_heat_max[Shoot_Data->Shoot_Upload_Data.robot_level - 1];
-            now_heat_cd = booster_burst_first_heat_cd[Shoot_Data->Shoot_Upload_Data.robot_level - 1];
+            // heat_limit_max = booster_burst_first_heat_max[abs(Shoot_Data->Shoot_Upload_Data.robot_level - 1)];
+            // now_heat_cd = booster_burst_first_heat_cd[abs(Shoot_Data->Shoot_Upload_Data.robot_level - 1)];
+            heat_limit_max = 170;
+            now_heat_cd = 5;
         } else if (shooter_type == Robot_Booster_Type_CD) {
             //冷却优先模式
-            heat_limit_max = booster_cd_first_heat_max[Shoot_Data->Shoot_Upload_Data.robot_level - 1];
-            now_heat_cd = booster_cd_first_heat_cd[Shoot_Data->Shoot_Upload_Data.robot_level - 1];
+            heat_limit_max = booster_cd_first_heat_max[abs(Shoot_Data->Shoot_Upload_Data.robot_level - 1)];
+            now_heat_cd = booster_cd_first_heat_cd[abs(Shoot_Data->Shoot_Upload_Data.robot_level - 1)];
         }
         now_heat = now_heat_calorie_monitor;
     } else {
@@ -258,7 +260,6 @@ static void Shoot_Status_Serve(void) {
  */
 static void Calorie_Monitor(void) //热量监测使用(未完成)
 {
-    static float now_heat = 0; //当前热量
     switch (shoot_state) {
         case SHOOT_DETECTION_STOP: {
             // 停机状态，当摩擦轮启动且达到了目标速度时进入开机状态
@@ -329,9 +330,9 @@ static void FireContorl(void) //发射状态机,防止热量超限
 
     // 定义阈值 (假设逻辑：热量越高，射速越慢)
     // 下面这些值需要根据实际情况调整
-    float Q_safe = Qlimit - 100; // 安全区 (对应图中的 Qres 大)
-    float Q_warn = Qlimit - 40; // 警告区 (开始减速)
-    float Q_stop = Qlimit - 10; // 停止区 (对应图中的 Qres 小)
+    float Q_safe = (float)Qlimit - 100; // 安全区 (对应图中的 Qres 大)
+    float Q_warn = (float)Qlimit - 40; // 警告区 (开始减速)
+    float Q_stop = (float)Qlimit - 10; // 停止区 (对应图中的 Qres 小)
 
     float target_rate = 15; // 原始设定的最大射频，不要直接用 shoot_cmd_recv.shoot_rate 修改
 

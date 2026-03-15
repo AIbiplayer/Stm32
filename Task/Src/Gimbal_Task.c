@@ -30,7 +30,6 @@ static void Gimbal_Status_Serve(void);
  * @brief 云台任务
  */
 void GimbalTask(void const *argument) {
-
 #ifdef MCU_GIMBAL
     taskENTER_CRITICAL();
     Gimbal_Init();
@@ -38,7 +37,6 @@ void GimbalTask(void const *argument) {
 #endif
 
     for (;;) {
-
 #ifdef MCU_GIMBAL
         SubGetMessage(gimbal_sub, &gimbal_cmd_recv);
 
@@ -78,51 +76,51 @@ static void Gimbal_Init(void) {
             .Loop_Control = ANGLE_SPEED_CONTROL,
             .Angle_Feedback_Source = OTHER_FEEDBACK,
             .Speed_Feedback_Source = OTHER_FEEDBACK,
-            .Feedforward_Flag = CURRENT_FEEDFORWARD,
+            .Feedforward_Flag = FEEDFORWARD_NONE,
             .Other_Angle_Feedback_Ptr = &Gimbal_IMU_Data->Roll,
             .Other_Speed_Feedback_Ptr = &Gimbal_IMU_Data->Gyro[1],
-            .Feedforward_Ptr = &Gimbal_Pitch->Measure.gravity_compensate
+            .Feedforward_Ptr = NULL
         },
         .Motor_Type = GM6020,
         .Working_Type = MOTOR_ENABLE
     };
 
     PID_Param(&Yaw.Control_Setting.Speed_PID,
-              20.0f, // 原20，0,1500
+              35.0f,
               0.0f,
-              1500.0f,
+              1.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
               0,
               100,
-              8000);
+              14000);
     PID_Param(&Yaw.Control_Setting.Angle_PID,
-              45.0f,// 原45，0，0
-              0.0f,
-              0.0f,
+              45.0f,
+              0.1f,
+              350.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
               0,
               1000,
-              8000);
+              14000);
     PID_Param(&Pitch.Control_Setting.Speed_PID,
-              65.0f, // 原65, 0,0
+              75.0f,
               0,
-              1000.0f,
+              5.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
               0,
               1000,
-              8000);
+              14000);
     PID_Param(&Pitch.Control_Setting.Angle_PID,
-              35.0f,
-              0,
-              0.0f,
+              45.0f,
+              0.1f,
+              205.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
               0,
               1000,
-              8000);
+              14000);
 
     Yaw.Can_Init_Config.tx_id = 2;
     Yaw.Control_Setting.Reverse_Flag = MOTOR_NORMAL;

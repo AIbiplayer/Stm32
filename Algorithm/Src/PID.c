@@ -77,12 +77,15 @@ float PID_Calculate(PID_Typedef* PID_, float Target_, float Actual_)
         PID_->Dout = PID_->DOut_Filter * PID_->Dout + (1 - PID_->DOut_Filter) * PID_->Last_DOut;
     }
     PID_->Output = PID_->POut + PID_->IOut + PID_->Dout;
-    // 输出限幅
-    PID_->Output = fabsf(PID_->Output) > PID_->Max_Output
-                       ? (int32_t)PID_->Output > 0
-                             ? PID_->Max_Output
-                             : -PID_->Max_Output
-                       : PID_->Output;
+    // 输出限幅：将输出限制在 [-Max_Output, +Max_Output] 范围内
+    if (PID_->Output > PID_->Max_Output)
+    {
+        PID_->Output = PID_->Max_Output;
+    }
+    else if (PID_->Output < -PID_->Max_Output)
+    {
+        PID_->Output = -PID_->Max_Output;
+    }
     return PID_->Output;
 }
 
