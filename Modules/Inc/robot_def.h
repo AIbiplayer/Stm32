@@ -27,7 +27,7 @@
 #define PITCH_MIN_ANGLE -23.00f           // 云台竖直方向最小角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
 // 发射参数
 #define SHOOT_COMPENSATION_K 1.5f // 发射补偿系数,用于调节发射速度与距离的关系 todo 具体数值待调试
-#define ONE_BULLET_DELTA_ANGLE  40.00f   // 发射一发弹丸拨盘转动的距离,由机械设计图纸给出
+#define ONE_BULLET_DELTA_ANGLE  36.00f   // 发射一发弹丸拨盘转动的距离,由机械设计图纸给出
 #define REDUCTION_SHOOT 2.5f // 齿轮减速比
 #define  RADIUS_FRICTION 30.0f // 摩擦轮半径,单位mm
 #define REDUCTION_RATIO_LOADER 36.0f // 拨盘电机的减速比,2006减速比36：1
@@ -250,7 +250,7 @@ typedef struct {
     uint16_t heat; // 枪口热量
     uint16_t shooter_heat_limit; // 枪口热量上限
     uint8_t shooter_barrel_cooling_value; // 枪管冷却值
-    int8_t robot_level: 7; // 机器人等级
+    uint8_t robot_level: 7; // 机器人等级
     uint8_t reference_online_state: 1; // 参考数据在线状态
 } Shoot_Upload_Data_s;
 

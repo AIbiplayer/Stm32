@@ -29,10 +29,7 @@ void VisionSetFlag(Enemy_Color_e enemy_color, Work_Mode_e work_mode, Bullet_Spee
 
 /**
  * @brief 设置发送数据的姿态部分
- *
- * @param yaw
- * @param pitch
  */
-void VisionSetAltitude(float yaw, float pitch);
+void VisionSetAltitude(float yaw, float pitch, uint8_t my_colour, Aimbot_Mode_e aimbot_mode);
 
 #endif // !MASTER_PROCESS_H

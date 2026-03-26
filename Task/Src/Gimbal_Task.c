@@ -26,6 +26,12 @@ static void Gimbal_Init(void);
 
 static void Gimbal_Status_Serve(void);
 
+// float YAKP = 0.0f, YAKI = 0.0f, YAKD = 0.0f;
+// float YSKP = 0.0f, YSKI = 0.0f, YSKD = 0.0f;
+// float PAKP = 0.0f, PAKI = 0.0f, PAKD = 0.0f;
+// float PSKP = 0.0f, PSKI = 0.0f, PSKD = 0.0f;
+// float PT, PA, YA, YT;
+
 /**
  * @brief 云台任务
  */
@@ -39,6 +45,23 @@ void GimbalTask(void const *argument) {
     for (;;) {
 #ifdef MCU_GIMBAL
         SubGetMessage(gimbal_sub, &gimbal_cmd_recv);
+
+        // PT = Gimbal_Pitch->Control_Setting.Target;
+        // PA = Gimbal_Pitch->Control_Setting.Angle_PID.Actual;
+        // YT = Gimbal_Yaw->Control_Setting.Target;
+        // YA = Gimbal_Yaw->Control_Setting.Angle_PID.Actual;
+        // Gimbal_Pitch->Control_Setting.Angle_PID.Kp = PAKP;
+        // Gimbal_Pitch->Control_Setting.Angle_PID.Ki = PAKI;
+        // Gimbal_Pitch->Control_Setting.Angle_PID.Kd = PAKD;
+        // Gimbal_Pitch->Control_Setting.Speed_PID.Kp = PSKP;
+        // Gimbal_Pitch->Control_Setting.Speed_PID.Ki = PSKI;
+        // Gimbal_Pitch->Control_Setting.Speed_PID.Kd = PSKD;
+        // Gimbal_Yaw->Control_Setting.Angle_PID.Kp = YAKP;
+        // Gimbal_Yaw->Control_Setting.Angle_PID.Ki = YAKI;
+        // Gimbal_Yaw->Control_Setting.Angle_PID.Kd = YAKD;
+        // Gimbal_Yaw->Control_Setting.Speed_PID.Kp = YSKP;
+        // Gimbal_Yaw->Control_Setting.Speed_PID.Ki = YSKI;
+        // Gimbal_Yaw->Control_Setting.Speed_PID.Kd = YSKD;
 
         Gimbal_Status_Serve();
 
@@ -86,7 +109,7 @@ static void Gimbal_Init(void) {
     };
 
     PID_Param(&Yaw.Control_Setting.Speed_PID,
-              35.0f,
+              90.0f,
               0.0f,
               1.0f,
               Integral_Limit | Derivative_On_Measurement,
@@ -95,27 +118,27 @@ static void Gimbal_Init(void) {
               100,
               14000);
     PID_Param(&Yaw.Control_Setting.Angle_PID,
-              45.0f,
-              0.1f,
-              350.0f,
+              20.0f,
+              0.0f,
+              400.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
               0,
               1000,
               14000);
     PID_Param(&Pitch.Control_Setting.Speed_PID,
-              75.0f,
+              105.0f,
               0,
-              5.0f,
+              0.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
               0,
               1000,
               14000);
     PID_Param(&Pitch.Control_Setting.Angle_PID,
-              45.0f,
-              0.1f,
-              205.0f,
+              30.0f,
+              0.0f,
+              350.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
               0,

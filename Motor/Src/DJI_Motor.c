@@ -218,18 +218,16 @@ void DJI_Motor_Control(void) {
                       ? PID_Ref + *DJI_Instance->Control_Setting.Feedforward_Ptr
                       : PID_Ref;
 
-        const int16_t Set = (int16_t) PID_Ref; //CAN发送的设定值
-        DJI_Instance->Control_Setting.Power_Estimate = power_calculate(Set, Measure.Speed);
-        DJI_Instance->Control_Setting.Power_Output = Set;
+        DJI_Instance->Control_Setting.Power_Estimate = power_calculate(Measure.Current, Measure.Speed);
+        DJI_Instance->Control_Setting.Power_Output = (int16_t)PID_Ref;
 
         //功率限制部分
         if (i != Idx - 1)
             continue;
-        // power_limit();
+        power_limit();
 
         for (uint8_t k = 0; k < Idx; k++) {
             DJI_Instance = Instance_Group[k];
-            // DJI_Instance->Control_Setting = DJI_Instance->DJI_Instance->Control_Setting;
             const uint8_t Group = DJI_Instance->Send_Group;
             const uint8_t InGroup_ID = DJI_Instance->Message_Num;
 

@@ -28,7 +28,9 @@
 typedef struct //@todo 后续补充底盘反馈数据
 {
     Chassis_Ctrl_Cmd_s Chassis_Cmd; ///< 底盘控制命令
-
+    gimbal_mode_e gimbal_mode: 2; ///< 云台模式,供底盘判断是否需要进行跟随等控制
+    friction_mode_e friction_mode: 1; ///< 摩擦轮模式,供底盘判断是否需要进行跟随等控制
+    uint8_t speed_target; ///< 发射速度目标,供底盘判断是否需要进行跟随等控制
 } TMC_To_Chassis_s; ///< 从云台发送到底盘的控制数据结构体
 
 typedef struct {

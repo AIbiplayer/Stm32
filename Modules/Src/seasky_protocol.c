@@ -82,7 +82,7 @@ void get_protocol_send_data(Vision_Send_s *tx_data, // 待发送的数据
     tx_buf[1] = tx_data->cmd_data_type; //数据类型id,比如云台位置数据,开火控制数据等等
     switch (tx_data->cmd_data_type) {
         case TX_GIMBAL_POSITION:
-            memcpy(tx_buf, &tx_data->gimbal_data, sizeof(tx_data->gimbal_data));
+            memcpy(tx_buf + 2, &tx_data->gimbal_data, sizeof(tx_data->gimbal_data));
             data_len = 2 + sizeof(tx_data->gimbal_data);
             break;
         default:
@@ -96,29 +96,39 @@ void get_protocol_send_data(Vision_Send_s *tx_data, // 待发送的数据
     此函数用于处理接收数据，
     可以返回数据内容的id
 */
-uint16_t get_protocol_info(uint8_t *rx_buf, // 接收到的原始数据
-                           Vision_Recv_s *rx_data) // 接收的float数据存储地址
+uint16_t get_protocol_info(uint8_t *rx_buf,          // 接收到的原始数据
+                           Vision_Recv_s *rx_data)         // 接收的float数据存储地址
 {
     // 放在静态区,避免反复申请栈上空间
     static protocol_rm_struct pro;
     static Rx_Data_type_e command_data;
-
-    if (protocol_heade_Check(&pro, rx_buf)) {
+    if (protocol_heade_Check(&pro, rx_buf))
+    {
         command_data = rx_buf[1];
-        switch (command_data) {
+        switch (command_data)
+        {
             case RECEIVE_GIMBAL_POSITION:
                 rx_data->cmd_data_type = command_data;
                 if (rx_buf[2 + sizeof(rx_data->gimbal_data)] == Sum_Check_Sum(rx_buf, 2 + sizeof(rx_data->gimbal_data)))
+                {
+                    memcpy(&rx_data->last_gimbal_data, &rx_data->gimbal_data, sizeof(rx_data->last_gimbal_data)); //接收到新的数据，保存上次数据
                     memcpy(&rx_data->gimbal_data, rx_buf + 2, sizeof(rx_data->gimbal_data));
+                    rx_data->gimbal_data.pitch = rx_data->gimbal_data.pitch * 180 / 3.1415926f;
+                    rx_data->gimbal_data.yaw = rx_data->gimbal_data.yaw * 180 / 3.1415926f;
+                    get_protocol_info(&rx_buf[3 + sizeof(rx_data->gimbal_data)], rx_data);
+
+                }
                 break;
             case RECEIVE_FIRE_CONTROL:
                 rx_data->cmd_data_type = command_data;
-                if (rx_buf[2 + sizeof(rx_data->fire_control_data)] == Sum_Check_Sum(
-                        rx_buf, 2 + sizeof(rx_data->fire_control_data)))
+                if (rx_buf[2 + sizeof(rx_data->fire_control_data)] == Sum_Check_Sum(rx_buf, 2 + sizeof(rx_data->fire_control_data)))
+                {
                     memcpy(&rx_data->fire_control_data, rx_buf + 2, sizeof(rx_data->fire_control_data));
+                    get_protocol_info(&rx_buf[3 + sizeof(rx_data->fire_control_data)], rx_data);
+                }
                 break;
             default:
-                break;
+                // return 0;
         }
     }
     return 0;

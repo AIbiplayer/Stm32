@@ -81,7 +81,7 @@ SuperCapInstance *SuperCapInit(SuperCap_Init_Config_s *supercap_config)
  * @param instance 要发送数据的超级电容实例
  * @param refereePowerLimit 当前裁判系统限制功率
  * @param refereeEnergyBuffer 当前缓冲能量
- * @param activeChargingLimitRatio 超级电容充满电量百分比, 只能是0到100的值
+ * @param activeChargingLimitRatio 超级电容充满电量百分比, 只能是0到1的值
  */
 void SuperCapSend(SuperCapInstance *instance, uint16_t refereePowerLimit, uint16_t refereeEnergyBuffer, float activeChargingLimitRatio)
 {

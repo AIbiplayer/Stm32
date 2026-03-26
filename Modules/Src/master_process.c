@@ -24,9 +24,11 @@ void VisionSetFlag(Enemy_Color_e enemy_color, Work_Mode_e work_mode, Bullet_Spee
     // send_data.bullet_speed = bullet_speed;
 }
 
-void VisionSetAltitude(float yaw, float pitch) {
-    send_data.gimbal_data.yaw = yaw;
-    send_data.gimbal_data.pitch = pitch;
+void VisionSetAltitude(float yaw, float pitch, uint8_t my_colour, Aimbot_Mode_e aimbot_mode) {
+    send_data.gimbal_data.yaw = yaw * DEGREE_2_RAD;
+    send_data.gimbal_data.pitch = pitch * DEGREE_2_RAD;
+    send_data.gimbal_data.mycolour = my_colour;
+    send_data.gimbal_data.aimbot_mode = aimbot_mode;
 }
 
 /**

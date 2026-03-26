@@ -80,4 +80,6 @@ void UIGraphRefresh(referee_id_t *_id, int cnt, ...);
 
 void UICharRefresh(referee_id_t *_id, String_Data_t string_Data);
 
+void MyUIRefresh(referee_info_t *referee_recv_info, Referee_Interactive_info_t *_Interactive_data);
+
 #endif

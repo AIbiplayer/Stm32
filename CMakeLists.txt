@@ -58,6 +58,7 @@ file(GLOB_RECURSE ALGORITHM_SOURCE "Algorithm/Src/*c")
 file(GLOB_RECURSE MOTOR_SOURCE "Motor/Src/*c")
 file(GLOB_RECURSE MODULES_SOURCE "Modules/Src/*c")
 file(GLOB_RECURSE TASK_SOURCE "Task/Src/*c")
+file(GLOB_RECURSE UI_SOURCE "Modules/UI/*c")
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
@@ -67,6 +68,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
         ${MOTOR_SOURCE}
         ${MODULES_SOURCE}
         ${TASK_SOURCE}
+        ${UI_SOURCE}
 )
 
 # Add include paths
@@ -77,6 +79,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
         Motor/Inc
         Modules/Inc
         Task/Inc
+        Modules/UI
 )
 
 # Add project symbols (macros)

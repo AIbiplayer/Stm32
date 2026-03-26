@@ -171,10 +171,8 @@ static void Shoot_Status_Serve(void) {
         // 裁判系统掉线或远端信息不可信
         if (shooter_type == Robot_Booster_Type_BURST) {
             //爆发优先模式
-            // heat_limit_max = booster_burst_first_heat_max[abs(Shoot_Data->Shoot_Upload_Data.robot_level - 1)];
-            // now_heat_cd = booster_burst_first_heat_cd[abs(Shoot_Data->Shoot_Upload_Data.robot_level - 1)];
-            heat_limit_max = 170;
-            now_heat_cd = 5;
+            heat_limit_max = booster_burst_first_heat_max[abs(Shoot_Data->Shoot_Upload_Data.robot_level - 1)];
+            now_heat_cd = booster_burst_first_heat_cd[abs(Shoot_Data->Shoot_Upload_Data.robot_level - 1)];
         } else if (shooter_type == Robot_Booster_Type_CD) {
             //冷却优先模式
             heat_limit_max = booster_cd_first_heat_max[abs(Shoot_Data->Shoot_Upload_Data.robot_level - 1)];
@@ -193,8 +191,8 @@ static void Shoot_Status_Serve(void) {
     // 摩擦轮控制,单位m/s
     switch (shoot_cmd_recv.friction_mode) {
         case FRICTION_ON:
-            DJI_MotorSetTarget(Friction_L, 21 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);
-            DJI_MotorSetTarget(Friction_R, 21 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);
+            DJI_MotorSetTarget(Friction_L, 13 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);//视觉模式为23m/s
+            DJI_MotorSetTarget(Friction_R, 13 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);//视觉模式为23m/s
             break;
         case FRICTION_OFF:
             DJI_MotorSetTarget(Friction_L, 0);

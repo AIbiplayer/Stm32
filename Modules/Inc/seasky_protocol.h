@@ -11,6 +11,30 @@
 
 typedef enum
 {
+	COLOR_NONE = 0,
+	COLOR_BLUE = 1,
+	COLOR_RED = 2,
+} Enemy_Color_e;
+
+typedef enum
+{
+	VISION_MODE_AIM = 0,
+	VISION_MODE_SMALL_BUFF = 1,
+	VISION_MODE_BIG_BUFF = 2
+} Work_Mode_e;
+
+typedef enum
+{
+	BULLET_SPEED_NONE = 0,
+	BIG_AMU_10 = 10,
+	SMALL_AMU_15 = 15,
+	BIG_AMU_16 = 16,
+	SMALL_AMU_18 = 18,
+	SMALL_AMU_22 = 22,
+} Bullet_Speed_e;
+
+typedef enum
+{
 	RECEIVE_GIMBAL_POSITION = 0x10,
 	RECEIVE_FIRE_CONTROL = 0x11,
 }Rx_Data_type_e;
@@ -47,6 +71,15 @@ typedef enum
 	BASE = 8
 } Target_Type_e;
 
+typedef enum
+{
+	AIM_OFF = 0,
+	AIM_NORMAL = 1, //常规自瞄
+	AIM_SMALL_ENERGY_BUFF = 2, //小能量机关自瞄
+	AIM_BIG_ENERGY_BUFF = 3, //大能量机关自瞄
+
+}Aimbot_Mode_e;
+
 typedef struct
 {
 	float yaw; //云台相对于车身的yaw角度，弧度制，范围为- pi ~ pi
@@ -55,11 +88,11 @@ typedef struct
 
 typedef struct
 {
-	uint8_t friction_flag : 1; //摩擦轮开启状态
-	uint8_t fire_mode_flag : 1; //发射模式标志位，0 为连发，1为单发
-	uint8_t reserved_1 : 1; //保留位
-	uint8_t fire_flag : 1; //发射标志位，0为不发射，1为发射
 	uint8_t reserved_2 : 4; //保留位
+	uint8_t fire_flag : 1; //发射标志位，0为不发射，1为发射
+	uint8_t find_target : 1; //发现目标标志位，0为未发现目标，1为发现目标
+	uint8_t fire_mode_flag : 1; //发射模式标志位，0 为连发，1为单发
+	uint8_t distance_flag : 1; //距离标志位，0为不在距离，1为在距离
 	uint8_t loader_frequency; //开火频率，单位为发/s
 }Fire_Control_Data_s;
 
@@ -73,41 +106,25 @@ typedef struct
 	Rx_Gimbal_Data_s gimbal_data; //上位机发送的云台数据
 	Fire_Control_Data_s fire_control_data; //上位机发送的发射控制数据
 
+	//上次接收到的数据，用来对比
+	Rx_Gimbal_Data_s last_gimbal_data; //上次上位机发送的云台数据
+
 } Vision_Recv_s;
 
-typedef enum
-{
-	COLOR_NONE = 0,
-	COLOR_BLUE = 1,
-	COLOR_RED = 2,
-} Enemy_Color_e;
-
-typedef enum
-{
-	VISION_MODE_AIM = 0,
-	VISION_MODE_SMALL_BUFF = 1,
-	VISION_MODE_BIG_BUFF = 2
-} Work_Mode_e;
-
-typedef enum
-{
-	BULLET_SPEED_NONE = 0,
-	BIG_AMU_10 = 10,
-	SMALL_AMU_15 = 15,
-	BIG_AMU_16 = 16,
-	SMALL_AMU_18 = 18,
-	SMALL_AMU_22 = 22,
-} Bullet_Speed_e;
 
 typedef struct
 {
 	float yaw; //云台相对于车身的yaw角度,- pi ~ pi
 	float pitch; //云台相对于车身的pitch角度，-pi ~ pi
+	uint8_t reserved : 5; //保留位
+	uint8_t mycolour : 1; //我方颜色，0为蓝色，1为红色
+	Aimbot_Mode_e aimbot_mode : 2; //自瞄模式
+
 }Tx_Gimbal_Data_s;
 
 typedef struct
 {
-	Tx_Data_type_e cmd_data_type; //
+	Tx_Data_type_e cmd_data_type; //命令码
 	Tx_Gimbal_Data_s gimbal_data; //控制板发送的云台数据
 } Vision_Send_s;
 

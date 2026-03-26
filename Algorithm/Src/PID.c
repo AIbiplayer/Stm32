@@ -54,14 +54,17 @@ float PID_Calculate(PID_Typedef* PID_, float Target_, float Actual_)
         return 0.0f;
     // 积分计算
     PID_->Error_Sum += PID_->Improve & Trapezoid_Intergral ? (PID_->Error + PID_->Last_Error) / 2 : PID_->Error;
-    // 积分限幅
+    // 积分限幅：将积分累积值限制在 [-I_Limit, +I_Limit] 范围内
     if (PID_->Improve & Integral_Limit)
     {
-        PID_->Error_Sum = fabsf(PID_->Error_Sum) > PID_->I_Limit
-                              ? (int16_t)(PID_->Error_Sum) > 0
-                                    ? PID_->I_Limit
-                                    : -(PID_->I_Limit)
-                              : PID_->Error_Sum;
+        if (PID_->Error_Sum > PID_->I_Limit)
+        {
+            PID_->Error_Sum = PID_->I_Limit;
+        }
+        else if (PID_->Error_Sum < -PID_->I_Limit)
+        {
+            PID_->Error_Sum = -PID_->I_Limit;
+        }
     }
     // PID计算
     PID_->POut = PID_->Kp * PID_->Error;

@@ -147,7 +147,6 @@ void INS_Task(void)
         INS.Roll = QEKF_INS.Roll;
         INS.YawTotalAngle = QEKF_INS.YawTotalAngle;
 
-        VisionSetAltitude(INS.Yaw, INS.Pitch);//@todo 根据C板放置位置，Pitch和Roll调换位置
     }
 
     // temperature control

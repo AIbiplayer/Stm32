@@ -31,10 +31,9 @@ CCMRAM static Chassis_Ctrl_Cmd_s chassis_cmd_recv; // 底盘接收到的控制�
 CCMRAM static Chassis_Upload_Data_s chassis_feedback_data; // 底盘回传的反馈数据
 CCMRAM static PID_Typedef WZ_ROTATE_PID, WZ_FOLLOW_PID_ANGLE; // 旋转控制PID和跟随控制PID
 
-CCMRAM static TMC_To_Chassis_s *Chassis_Data; // 底盘与云台数据结构体实例
+CCMRAM TMC_To_Chassis_s *Chassis_Rec; // 底盘与云台数据结构体实例
 Track_Mode_e Chassis_Track_Mode; ///< 底盘履带模式
 extern CANCommInstance *CANCOM;
-extern INS_t INS;
 
 static void Chassis_Init(void);
 
@@ -44,8 +43,10 @@ static void Chassis_Status_Serve(void);
 
 static void Speed_Calculate(void);
 
-float AKP = 0, AKD = 0, AKI = 0;
-float AA, AD, APO, ADO, AIO;
+// float AKP = 0, AKD = 0, AKI = 0;
+// float AA, AD, APO, ADO, AIO;
+
+float Speed1, Speedout;
 
 /**
  * @brief 底盘FreeRTOS任务
@@ -56,6 +57,9 @@ void ChassisTask(void *argument) {
     taskEXIT_CRITICAL();
     for (;;) {
         Speed_Calculate();
+        Speed1 = Mec_Wheel[0]->Control_Setting.Speed_PID.Output;
+        Speedout = Mec_Wheel[0]->Control_Setting.Power_Output;
+
         //
         // WZ_FOLLOW_PID_ANGLE.Kp = AKP;
         // WZ_FOLLOW_PID_ANGLE.Kd = AKD;
@@ -103,7 +107,7 @@ static void Chassis_Init(void) {
               1,
               0,
               500,
-              14000);
+              11000);
 
     Mec_Chassis.Can_Init_Config.tx_id = 1;
     Mec_Chassis.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
@@ -167,9 +171,9 @@ static void Chassis_Init(void) {
     PID_Param(&WZ_ROTATE_PID, 5.0f, 0.0f, 1.5f, Integral_Limit | Derivative_On_Measurement,
               1.0f, 0.0f, 0.5f, 0.5f); // 最高0.5转/秒
     PID_Param(&WZ_FOLLOW_PID_ANGLE, 0.03f, 0.0f, 15.0f, Integral_Limit | Derivative_On_Measurement | OutputFilter,
-              0.9f, 2.0f, 20, 0.5f); // 最高0.5转/秒
+              0.9f, 4.0f, 20, 0.5f); // 最高0.5转/秒
 
-    Chassis_Data = (TMC_To_Chassis_s *) CANCommGet(CANCOM);
+    Chassis_Rec = (TMC_To_Chassis_s *) CANCommGet(CANCOM);
 }
 
 /**
@@ -177,8 +181,8 @@ static void Chassis_Init(void) {
  * @note 底盘运动学模型，这里包含底盘与云台的角度计算等
  */
 static void Speed_Calculate(void) {
-    if (Chassis_Data != NULL)
-        chassis_cmd_recv = Chassis_Data->Chassis_Cmd;
+    if (Chassis_Rec != NULL)
+        chassis_cmd_recv = Chassis_Rec->Chassis_Cmd;
 
     static float sin_theta, cos_theta; // 夹角正余弦值
     cos_theta = cosf(chassis_cmd_recv.offset_angle * DEGREE_2_RAD); // 角度*pai/180

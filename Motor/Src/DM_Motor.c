@@ -7,6 +7,8 @@
  */
 
 #include "DM_Motor.h"
+
+#include "cmsis_os.h"
 #include "main.h"
 #include "math.h"
 #include "stdbool.h"

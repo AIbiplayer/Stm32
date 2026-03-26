@@ -17,6 +17,8 @@
 static referee_info_t *referee_recv_info; // 裁判系统数据指针,由Referee_Init()返回
 static Referee_Interactive_info_t *Interactive_data; // UI绘制需要的机器人状态
 
+uint8_t UI_Seq;
+
 static Graph_Data_t UI_shoot_line[10]; // 射击准线
 static Graph_Data_t UI_Energy[3]; // 电容能量条
 static String_Data_t UI_State_sta[6]; // 机器人状态,静态只需画一次
@@ -77,6 +79,7 @@ static void UIChangeCheck(Referee_Interactive_info_t *_Interactive_data) {
     }
 }
 
+
 /**
  * @brief  UI绘制和交互数的发送接口,由UI绘制任务和多机通信函数调用
  * @note 内部包含了一个实时系统的延时函数,这是因为裁判系统接收CMD数据至高位10Hz
@@ -85,7 +88,7 @@ static void UIChangeCheck(Referee_Interactive_info_t *_Interactive_data) {
  * @retval none
  * @attention 该函数会根据flag判断哪些模式切换了，刷新对应的UI，刷新完成后将flag清零
  */
-static void MyUIRefresh(referee_info_t *referee_recv_info, Referee_Interactive_info_t *_Interactive_data) {
+void MyUIRefresh(referee_info_t *referee_recv_info, Referee_Interactive_info_t *_Interactive_data) {
     UIChangeCheck(_Interactive_data);
     // chassis
     if (_Interactive_data->Referee_Interactive_Flag.chassis_flag == 1) {
@@ -163,7 +166,7 @@ static void MyUIRefresh(referee_info_t *referee_recv_info, Referee_Interactive_i
 referee_info_t *UIInit(UART_HandleTypeDef *referee_usart_handle, Referee_Interactive_info_t *UI_data) {
     referee_recv_info = Referee_Init(referee_usart_handle); // 初始化裁判系统的串口,并返回裁判系统反馈数据指针
     Interactive_data = UI_data; // 获取UI绘制需要的机器人状态数据
-    referee_recv_info->init_flag = 1;
+    referee_recv_info->init_flag = 0;
     return referee_recv_info;
 }
 
