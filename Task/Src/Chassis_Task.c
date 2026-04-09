@@ -169,7 +169,7 @@ static void Chassis_Init(void) {
     DM_MotorSaveZero(Track_Wheel[3]);
 
     PID_Param(&WZ_ROTATE_PID, 5.0f, 0.0f, 1.5f, Integral_Limit | Derivative_On_Measurement,
-              1.0f, 0.0f, 0.5f, 0.5f); // 最高0.5转/秒
+              1.0f, 0.0f, 0.5f, 1.3f); // 最高1.3转/秒
     PID_Param(&WZ_FOLLOW_PID_ANGLE, 0.03f, 0.0f, 15.0f, Integral_Limit | Derivative_On_Measurement | OutputFilter,
               0.9f, 4.0f, 20, 0.5f); // 最高0.5转/秒
 
@@ -200,7 +200,7 @@ static void Speed_Calculate(void) {
         }
         case CHASSIS_ROTATE: {
             PID_Clean_I(&WZ_FOLLOW_PID_ANGLE);
-            chassis_vw = PID_Calculate(&WZ_ROTATE_PID, 0.1f, 0);
+            chassis_vw = PID_Calculate(&WZ_ROTATE_PID, 1.0f, 0);
             chassis_vx = chassis_cmd_recv.vy * cos_theta - chassis_cmd_recv.vx * sin_theta;
             chassis_vy = chassis_cmd_recv.vy * sin_theta + chassis_cmd_recv.vx * cos_theta;
             break;

@@ -1,6 +1,7 @@
 #ifndef __SEASKY_PROTOCOL_H
 #define __SEASKY_PROTOCOL_H
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
 
@@ -11,26 +12,16 @@
 
 typedef enum
 {
-	COLOR_NONE = 0,
-	COLOR_BLUE = 1,
-	COLOR_RED = 2,
+	COLOR_BLUE = 0,
+	COLOR_RED = 1,
 } Enemy_Color_e;
 
 typedef enum
 {
-	VISION_MODE_AIM = 0,
-	VISION_MODE_SMALL_BUFF = 1,
-	VISION_MODE_BIG_BUFF = 2
-} Work_Mode_e;
-
-typedef enum
-{
-	BULLET_SPEED_NONE = 0,
-	BIG_AMU_10 = 10,
-	SMALL_AMU_15 = 15,
-	BIG_AMU_16 = 16,
-	SMALL_AMU_18 = 18,
-	SMALL_AMU_22 = 22,
+	SMALL_AMU_22 = 0,
+	SMALL_AMU_20 = 1,
+	SMALL_AMU_18 = 2,
+	SMALL_AMU_15 = 3,
 } Bullet_Speed_e;
 
 typedef enum
@@ -92,7 +83,7 @@ typedef struct
 	uint8_t fire_flag : 1; //发射标志位，0为不发射，1为发射
 	uint8_t find_target : 1; //发现目标标志位，0为未发现目标，1为发现目标
 	uint8_t fire_mode_flag : 1; //发射模式标志位，0 为连发，1为单发
-	uint8_t distance_flag : 1; //距离标志位，0为不在距离，1为在距离
+	uint8_t distance_limit_inside : 1; //目标是否在距离内标志位
 	uint8_t loader_frequency; //开火频率，单位为发/s
 }Fire_Control_Data_s;
 
@@ -116,8 +107,9 @@ typedef struct
 {
 	float yaw; //云台相对于车身的yaw角度,- pi ~ pi
 	float pitch; //云台相对于车身的pitch角度，-pi ~ pi
-	uint8_t reserved : 5; //保留位
-	uint8_t mycolour : 1; //我方颜色，0为蓝色，1为红色
+	uint8_t reserved : 4; //保留位
+	bool enable_aimbot : 1; //是否开启自瞄
+	Enemy_Color_e enemy_color : 1; //敌方颜色，0为蓝色，1为红色
 	Aimbot_Mode_e aimbot_mode : 2; //自瞄模式
 
 }Tx_Gimbal_Data_s;

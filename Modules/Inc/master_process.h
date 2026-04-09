@@ -25,11 +25,11 @@ void VisionSend(void);
  * @param work_mode
  * @param bullet_speed
  */
-void VisionSetFlag(Enemy_Color_e enemy_color, Work_Mode_e work_mode, Bullet_Speed_e bullet_speed);
+// void VisionSetFlag(Enemy_Color_e enemy_color, Work_Mode_e work_mode, Bullet_Speed_e bullet_speed);
 
 /**
  * @brief 设置发送数据的姿态部分
  */
-void VisionSetAltitude(float yaw, float pitch, uint8_t my_colour, Aimbot_Mode_e aimbot_mode);
+void VisionSetAltitude(float yaw, float pitch);
 
 #endif // !MASTER_PROCESS_H

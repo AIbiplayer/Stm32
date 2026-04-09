@@ -13,6 +13,7 @@
 #include "string.h"
 #include "crc_ref.h"
 #include "bsp_usart.h"
+#include "ui_queue.h"
 
 #define RE_RX_BUFFER_SIZE 255u // 裁判系统接收缓冲区大小
 
@@ -129,8 +130,10 @@ referee_info_t *Referee_Init(UART_HandleTypeDef *referee_usart_handle) {
 
 /**
  * @brief 裁判系统数据发送函数
- * @param
+ * @param send 数据指针
+ * @param tx_len 数据长度
+ * @note 使用队列发送，实现非阻塞100Hz发送
  */
 void RefereeSend(uint8_t *send, uint16_t tx_len) {
-    HAL_UART_Transmit(&huart6, send, tx_len, 10);
+    UI_Queue_Push(send, tx_len);
 }

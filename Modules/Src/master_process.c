@@ -15,19 +15,28 @@
 static Vision_Recv_s recv_data; // 接收到的数据
 static Vision_Send_s send_data; // 待发送的数据
 static uint8_t send_buff[VISION_SEND_SIZE]; // 发送缓冲区
-
 extern USB_Control_t g_usb_dev; // 全局USB设备实例
 
-void VisionSetFlag(Enemy_Color_e enemy_color, Work_Mode_e work_mode, Bullet_Speed_e bullet_speed) {
-    // send_data.enemy_color = enemy_color;
-    // send_data.work_mode = work_mode;
-    // send_data.bullet_speed = bullet_speed;
+void VisionSetEnemyColorFlag(Enemy_Color_e enemy_color) {
+    send_data.gimbal_data.enemy_color = enemy_color;
 }
 
-void VisionSetAltitude(float yaw, float pitch, uint8_t my_colour, Aimbot_Mode_e aimbot_mode) {
+void VisionSetWorkModeFlag(Aimbot_Mode_e aimbot_mode) {
+    send_data.gimbal_data.aimbot_mode = aimbot_mode;
+}
+
+void VisionSetAimbotFlag(bool aimbot_flag) {
+    send_data.gimbal_data.enable_aimbot = aimbot_flag;
+}
+
+
+void VisionSetAltitude(float yaw, float pitch) {
+    send_data.gimbal_data.enable_aimbot = true;
     send_data.gimbal_data.yaw = yaw * DEGREE_2_RAD;
     send_data.gimbal_data.pitch = pitch * DEGREE_2_RAD;
-    send_data.gimbal_data.mycolour = my_colour;
+}
+
+void VisionSetFireFlag(Aimbot_Mode_e aimbot_mode) {
     send_data.gimbal_data.aimbot_mode = aimbot_mode;
 }
 
@@ -125,9 +134,8 @@ Vision_Recv_s *VisionInit(void) {
 
 void VisionSend(void) {
     static uint16_t tx_len;
-
     send_data.cmd_data_type = TX_GIMBAL_POSITION;
-    tx_len = sizeof(send_data.gimbal_data);
+
     // 将数据转化为seasky协议的数据包
     get_protocol_send_data(&send_data, send_buff, &tx_len);
     bsp_usb_transmit(send_buff, tx_len);

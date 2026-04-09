@@ -16,12 +16,10 @@
 #include "remote_control.h"
 #include "message_center.h"
 #include "robot_def.h"
-#include "ui_g.h"
 #include "super_cap.h"
 #include "Video_link.h"
 #include "TMC.h"
 #include "UI.h"
-#include "ui_interface.h"
 #include "ui_queue.h"
 
 CCMRAM RC_ctrl_t *RC_data = NULL; // 遥控器数据,初始化时返回
@@ -98,6 +96,10 @@ static void Keyboard_Cmd(void);
 
 static void Chassis_data_tidy(void);
 
+static void UI_Update_Upgroup_Data(void);
+
+static void UI_Init_Check(void);
+
 /**
  * @brief 命令读取与发送FreeRTOS任务
  * @note DJI电机控制函数在此调用
@@ -127,18 +129,19 @@ void CmdTask(void *argument) {
 
 #ifdef MCU_CHASSIS
 
-        ui_self_id = 3; // todo 这个ID应该从裁判系统数据里获取,现在先写死为3
         Chassis_data_tidy();
 
-        // UI发送服务：每3ms调用一次，内部控制约10ms发送一个UI帧（100Hz）
+        // UI发送服务：每3ms调用一次，内部控制约100ms发送一个UI帧（符合裁判系统10Hz限制）
         UI_Queue_SendService();
+        UI_Init_Check();
 
-        UI_count++;
-        if (Referee_data->init_flag == 1 && UI_count >= 100) // 裁判系统初始化完成且UI更新计数器达到100,约300ms触发一次UI更新
-        {
-            // UI更新数据加入队列（每次更新4个帧，将在40ms内按100Hz发送完成）
-            ui_update_g_Upgroup();
-            UI_count = 0;
+        // UI动态更新：约300ms触发一次，仅在初始化完成后执行
+        if (UI_Queue_GetInitState() == UI_INIT_DONE) {
+            UI_count++;
+            if (UI_count >= 100) {
+                UI_Update_Upgroup_Data();
+                UI_count = 0;
+            }
         }
 
         DM_count++;
@@ -316,10 +319,9 @@ static void VL_keyboard_cmd(void) {
     }
     if (VL_data[TEMP].key_count[KEY_PRESS][Key_Z] % 2 == 1) {
         // Z键重置UI
-        ui_self_id = Referee_data->GameRobotState.robot_id;
-        ui_init_g_Midgroup();
-        ui_init_g_Upgroup();
-        ui_init_g_Ungroup();
+        UI_Init_Midgroup();
+        UI_Init_Upgroup();
+        UI_Init_Ungroup();
     }
 
     //WASD方向平移
@@ -621,10 +623,9 @@ static void Keyboard_Cmd(void) {
 
     if (RC_data[TEMP].key_count[KEY_PRESS][Key_Z] % 2 == 1) {
         // Z键重置UI
-        ui_self_id = Referee_data->GameRobotState.robot_id;
-        ui_init_g_Midgroup();
-        ui_init_g_Upgroup();
-        ui_init_g_Ungroup();
+        UI_Init_Midgroup();
+        UI_Init_Upgroup();
+        UI_Init_Ungroup();
     }
 
     //WASD方向平移
@@ -806,77 +807,91 @@ static void Chassis_data_tidy(void) {
     Gimbal_Data.Shoot_Upload_Data.shooter_barrel_cooling_value = Referee_data->GameRobotState.
             shooter_barrel_cooling_value;
     Gimbal_Data.Shoot_Upload_Data.shooter_heat_limit = Referee_data->GameRobotState.shooter_barrel_heat_limit;
+}
 
-    // UI显示
+/**
+ * @brief UI数据更新函数
+ * @note 收集动态数据并调用UI更新函数
+ */
+static void UI_Update_Upgroup_Data(void) {
+    // 状态字符串
+    const char *chassis_mode_str = "NONE";
+    const char *gimbal_mode_str = "NONE";
+    const char *friction_mode_str = "OFF";
+
     switch (Chassis_Rec->friction_mode) {
-        case FRICTION_OFF:
-            memcpy(ui_g_Upgroup_friction_status->string, "OFF", 4);
-            ui_g_Upgroup_friction_status->str_length = 4;
-            // 包含 '\0'
+        case FRICTION_OFF: friction_mode_str = "OFF";
             break;
-        case FRICTION_ON:
-            memcpy(ui_g_Upgroup_friction_status->string, "ON ", 4);
-            ui_g_Upgroup_friction_status->str_length = 4;
+        case FRICTION_ON: friction_mode_str = "ON ";
             break;
-        default:
-            break;
+        default: break;
     }
     switch (Chassis_Rec->gimbal_mode) {
-        case GIMBAL_ZERO_FORCE:
-            memcpy(ui_g_Upgroup_gimbal_status->string, "ZERO", 5);
-            ui_g_Upgroup_gimbal_status->str_length = 5;
+        case GIMBAL_ZERO_FORCE: gimbal_mode_str = "ZERO";
             break;
-        case GIMBAL_GYRO_MODE:
-            memcpy(ui_g_Upgroup_gimbal_status->string, "GYRO", 5);
-            ui_g_Upgroup_gimbal_status->str_length = 5;
+        case GIMBAL_GYRO_MODE: gimbal_mode_str = "GYRO";
             break;
-        case GIMBAL_VISION:
-            memcpy(ui_g_Upgroup_gimbal_status->string, "VIS ", 5);
-            ui_g_Upgroup_gimbal_status->str_length = 5;
+        case GIMBAL_VISION: gimbal_mode_str = "VIS ";
             break;
-        case GIMBAL_FREE_MODE:
-            memcpy(ui_g_Upgroup_gimbal_status->string, "FREE", 5);
-            ui_g_Upgroup_gimbal_status->str_length = 5;
+        case GIMBAL_FREE_MODE: gimbal_mode_str = "FREE";
             break;
-        default:
-            break;
+        default: break;
     }
     switch (Chassis_Rec->Chassis_Cmd.chassis_mode) {
-        case CHASSIS_ZERO_FORCE:
-            memcpy(ui_g_Upgroup_chassis_status->string, "ZERO", 5);
-            ui_g_Upgroup_chassis_status->str_length = 5;
+        case CHASSIS_ZERO_FORCE: chassis_mode_str = "ZERO";
             break;
-        case CHASSIS_FOLLOW_GIMBAL_YAW:
-            memcpy(ui_g_Upgroup_chassis_status->string, "FOLL", 5);
-            ui_g_Upgroup_chassis_status->str_length = 5;
+        case CHASSIS_FOLLOW_GIMBAL_YAW: chassis_mode_str = "FOLL";
             break;
-        case CHASSIS_INDEPENDENCE:
-            memcpy(ui_g_Upgroup_chassis_status->string, "INDE", 5);
-            ui_g_Upgroup_chassis_status->str_length = 5;
+        case CHASSIS_INDEPENDENCE: chassis_mode_str = "INDE";
             break;
-        case CHASSIS_ROTATE:
-            memcpy(ui_g_Upgroup_chassis_status->string, "ROTA", 5);
-            ui_g_Upgroup_chassis_status->str_length = 5;
+        case CHASSIS_ROTATE: chassis_mode_str = "ROTA";
             break;
-        default:
-            break;
-    }
-    if (Referee_data->referee_online_state && Referee_data->GameRobotState.robot_id != 0) {
-        ui_self_id = Referee_data->GameRobotState.robot_id;
-        ui_g_Upgroup_trackhead_angle->end_angle = (uint32_t) Chassis_Rec->Chassis_Cmd.a_track_head;
-        ui_g_Upgroup_trackback_angle->start_angle = (uint32_t) (360.0f - Chassis_Rec->Chassis_Cmd.a_track_back);
-        ui_g_Upgroup_targetspeed_num->number = Chassis_Rec->speed_target * 100;
-        ui_g_Upgroup_power_num->end_x = (int32_t) (cap->cap_msg.chassisPower / (float) Referee_data->GameRobotState.
-                                                   chassis_power_limit * 400.0f) + 773;
-        ui_g_Upgroup_capenergy_num->end_x = (int32_t) (cap->cap_msg.capEnergy * 4.0f) + 773;
+        default: break;
     }
 
-    if (Referee_data->referee_online_state && Referee_data->init_flag == 0) {
-        Referee_data->init_flag = 1;
-        // UI初始化：3组共12个帧加入队列，将在约120ms内按100Hz发送完成
-        // 每个帧间隔约10ms发送，避免扎堆发送
-        ui_init_g_Midgroup();
-        ui_init_g_Upgroup();
-        ui_init_g_Ungroup();
+    // 计算图形数据
+    uint32_t track_head = (uint32_t) Chassis_Rec->Chassis_Cmd.a_track_head;
+    uint32_t track_back = (uint32_t) Chassis_Rec->Chassis_Cmd.a_track_back;
+    int32_t speed_target = Chassis_Rec->speed_target * 100;
+
+    uint32_t power_end_x = 773;
+    uint32_t capenergy_end_x = 773;
+    if (Referee_data->referee_online_state && Referee_data->GameRobotState.robot_id != 0) {
+        power_end_x = (uint32_t) (cap->cap_msg.chassisPower / (float) Referee_data->GameRobotState.chassis_power_limit *
+                                  400.0f) + 773;
+        capenergy_end_x = (uint32_t) (cap->cap_msg.capEnergy * 4.0f) + 773;
+    }
+
+    // 调用UI更新函数
+    UI_Update_Upgroup(track_head, track_back, speed_target, power_end_x, capenergy_end_x,
+                      chassis_mode_str, gimbal_mode_str, friction_mode_str);
+}
+
+/**
+ * @brief UI初始化检测
+ */
+static void UI_Init_Check(void) {
+    UI_Init_State_t init_state = UI_Queue_GetInitState();
+
+    if (init_state == UI_INIT_DONE) return; // 已完成初始化
+
+    if (init_state == UI_INIT_SENDING) {
+        // 正在发送初始化帧，等待队列清空
+        if (UI_Queue_IsEmpty()) {
+            UI_Queue_SetInitState(UI_INIT_DONE); // 标记初始化完成
+        }
+        return;
+    }
+
+    // init_state == UI_INIT_NOT_STARTED，等待裁判系统上线
+    if (Referee_data->referee_online_state) {
+        DetermineRobotID();
+
+        // UI初始化：3组图形分别发送
+        UI_Init_Midgroup();
+        UI_Init_Upgroup();
+        UI_Init_Ungroup();
+
+        UI_Queue_SetInitState(UI_INIT_SENDING); // 进入发送阶段
     }
 }

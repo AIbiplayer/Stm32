@@ -31,7 +31,7 @@ static uint32_t shoot_line_location[10] = {540, 960, 490, 515, 565};
  * @retval none
  * @attention
  */
-static void DetermineRobotID() {
+void DetermineRobotID(void) {
     // id小于7是红色,大于7是蓝色,0为红色，1为蓝色   #define Robot_Red 0    #define Robot_Blue 1
     referee_recv_info->referee_id.Robot_Color = referee_recv_info->GameRobotState.robot_id > 7 ? Robot_Blue : Robot_Red;
     referee_recv_info->referee_id.Robot_ID = referee_recv_info->GameRobotState.robot_id;
@@ -631,4 +631,152 @@ void UICharRefresh(referee_id_t *_id, String_Data_t string_Data) {
     RefereeSend((uint8_t *) &UI_CharReFresh_data, LEN_HEADER + LEN_CMDID + temp_datalength + LEN_TAIL); // 发送
 
     UI_Seq++; // 包序号+1
+}
+
+/****************************重组后的UI绘制函数****************************/
+// 数据来源：Modules/UI/ui_g.c
+// 使用Modules/Src/UI.c中的函数重新组织UI绘制
+
+// MIDGROUP 静态图形数据
+static Graph_Data_t mid_power_rect, mid_body, mid_capenergy_rect;
+static String_Data_t mid_capenergy_txt;
+
+// UNGROUP 静态标签数据
+static String_Data_t un_power_txt, un_targetspeed_txt, un_chassis_txt, un_gimbal_txt, un_friction_txt;
+
+// UPGROUP 动态图形数据
+static Graph_Data_t up_targetspeed_num, up_trackhead_angle, up_trackback_angle, up_capenergy_num, up_power_num;
+static String_Data_t up_chassis_status, up_gimbal_status, up_friction_status;
+
+/**
+ * @brief 初始化MIDGROUP：功率框、车身框、电容框、"CAP"字符串
+ * @note 3个矩形分2帧发送：先发2个，再发1个
+ */
+void UI_Init_Midgroup(void) {
+    // power_rect: 绿色矩形 (功率框)
+    UIRectangleDraw(&mid_power_rect, "m00", UI_Graph_ADD, 0, UI_Color_Green, 2, 773, 136, 1173, 176);
+
+    // body: 黄色矩形 (车身)
+    UIRectangleDraw(&mid_body, "m01", UI_Graph_ADD, 0, UI_Color_Yellow, 5, 200, 650, 300, 700);
+
+    // capenergy_rect: 橙色矩形 (电容框)
+    UIRectangleDraw(&mid_capenergy_rect, "m02", UI_Graph_ADD, 0, UI_Color_Orange, 2, 773, 90, 1173, 120);
+
+    // 发送前2个矩形
+    UIGraphRefresh(&referee_recv_info->referee_id, 2, mid_power_rect, mid_body);
+    // 发送第3个矩形
+    UIGraphRefresh(&referee_recv_info->referee_id, 1, mid_capenergy_rect);
+
+    // capenergy_txt: "CAP" 字符串
+    UICharDraw(&mid_capenergy_txt, "m03", UI_Graph_ADD, 0, UI_Color_Orange, 30, 3, 660, 120, "CAP");
+    UICharRefresh(&referee_recv_info->referee_id, mid_capenergy_txt);
+}
+
+/**
+ * @brief 初始化UNGROUP：5个静态标签
+ */
+void UI_Init_Ungroup(void) {
+    // power_txt: "POW"
+    UICharDraw(&un_power_txt, "u00", UI_Graph_ADD, 0, UI_Color_Green, 35, 4, 655, 175, "POW");
+    UICharRefresh(&referee_recv_info->referee_id, un_power_txt);
+
+    // targetspeed_txt: "SPD"
+    UICharDraw(&un_targetspeed_txt, "u01", UI_Graph_ADD, 0, UI_Color_Green, 20, 2, 1590, 600, "SPD");
+    UICharRefresh(&referee_recv_info->referee_id, un_targetspeed_txt);
+
+    // chassis_txt: "CHS"
+    UICharDraw(&un_chassis_txt, "u02", UI_Graph_ADD, 0, UI_Color_Green, 20, 2, 1590, 750, "CHS");
+    UICharRefresh(&referee_recv_info->referee_id, un_chassis_txt);
+
+    // gimbal_txt: "GIM"
+    UICharDraw(&un_gimbal_txt, "u03", UI_Graph_ADD, 0, UI_Color_Green, 20, 2, 1590, 700, "GIM");
+    UICharRefresh(&referee_recv_info->referee_id, un_gimbal_txt);
+
+    // friction_txt: "FRI"
+    UICharDraw(&un_friction_txt, "u04", UI_Graph_ADD, 0, UI_Color_Green, 20, 2, 1590, 650, "FRI");
+    UICharRefresh(&referee_recv_info->referee_id, un_friction_txt);
+}
+
+/**
+ * @brief 初始化UPGROUP：5个动态图形 + 3个状态字符串
+ */
+void UI_Init_Upgroup(void) {
+    // targetspeed_num: 整数显示
+    UIIntDraw(&up_targetspeed_num, "p00", UI_Graph_ADD, 0, UI_Color_Orange, 20, 2, 1660, 600, 1000);
+
+    // trackhead_angle: 圆弧
+    UIArcDraw(&up_trackhead_angle, "p01", UI_Graph_ADD, 0, UI_Color_Main, 0, 90, 10, 300, 650, 50, 50);
+
+    // trackback_angle: 圆弧
+    UIArcDraw(&up_trackback_angle, "p02", UI_Graph_ADD, 0, UI_Color_Yellow, 270, 360, 10, 200, 650, 50, 50);
+
+    // capenergy_num: 线条 (电容能量条)
+    UILineDraw(&up_capenergy_num, "p03", UI_Graph_ADD, 0, UI_Color_Orange, 30, 773, 90, 873, 90);
+
+    // power_num: 线条 (功率条)
+    UILineDraw(&up_power_num, "p04", UI_Graph_ADD, 0, UI_Color_Green, 40, 773, 136, 873, 136);
+
+    // 发送5个图形
+    UIGraphRefresh(&referee_recv_info->referee_id, 5, up_targetspeed_num, up_trackhead_angle,
+                   up_trackback_angle, up_capenergy_num, up_power_num);
+
+    // chassis_status: 字符串
+    UICharDraw(&up_chassis_status, "p05", UI_Graph_ADD, 0, UI_Color_Orange, 20, 2, 1660, 750, "NONE");
+    UICharRefresh(&referee_recv_info->referee_id, up_chassis_status);
+
+    // gimbal_status: 字符串
+    UICharDraw(&up_gimbal_status, "p06", UI_Graph_ADD, 0, UI_Color_Orange, 20, 2, 1660, 700, "NONE");
+    UICharRefresh(&referee_recv_info->referee_id, up_gimbal_status);
+
+    // friction_status: 字符串
+    UICharDraw(&up_friction_status, "p07", UI_Graph_ADD, 0, UI_Color_Orange, 20, 2, 1660, 650, "OFF");
+    UICharRefresh(&referee_recv_info->referee_id, up_friction_status);
+}
+
+/**
+ * @brief 更新UPGROUP动态数据
+ * @param track_head 履带头角度
+ * @param track_back 履带尾角度
+ * @param speed_target 目标速度
+ * @param power_end_x 功率条终点X坐标
+ * @param capenergy_end_x 电容能量条终点X坐标
+ * @param chassis_mode 底盘模式字符串
+ * @param gimbal_mode 云台模式字符串
+ * @param friction_mode 摩擦轮模式字符串
+ */
+void UI_Update_Upgroup(uint32_t track_head, uint32_t track_back, int32_t speed_target,
+                       uint32_t power_end_x, uint32_t capenergy_end_x,
+                       const char *chassis_mode, const char *gimbal_mode, const char *friction_mode) {
+    // 更新trackhead_angle: end_angle = track_head
+    UIArcDraw(&up_trackhead_angle, "p01", UI_Graph_Change, 0, UI_Color_Main,
+              0, track_head, 10, 300, 650, 50, 50);
+
+    // 更新trackback_angle: start_angle = 360 - track_back
+    UIArcDraw(&up_trackback_angle, "p02", UI_Graph_Change, 0, UI_Color_Yellow,
+              360 - track_back, 360, 10, 200, 650, 50, 50);
+
+    // 更新targetspeed_num
+    UIIntDraw(&up_targetspeed_num, "p00", UI_Graph_Change, 0, UI_Color_Orange, 20, 2, 1660, 600, speed_target);
+
+    // 更新capenergy_num: end_x = capenergy_end_x
+    UILineDraw(&up_capenergy_num, "p03", UI_Graph_Change, 0, UI_Color_Orange, 30,
+               773, 90, capenergy_end_x, 90);
+
+    // 更新power_num: end_x = power_end_x
+    UILineDraw(&up_power_num, "p04", UI_Graph_Change, 0, UI_Color_Green, 40,
+               773, 136, power_end_x, 136);
+
+    // 发送5个图形更新
+    UIGraphRefresh(&referee_recv_info->referee_id, 5, up_targetspeed_num, up_trackhead_angle,
+                   up_trackback_angle, up_capenergy_num, up_power_num);
+
+    // 更新状态字符串
+    UICharDraw(&up_chassis_status, "p05", UI_Graph_Change, 0, UI_Color_Orange, 20, 2, 1660, 750, "%s", chassis_mode);
+    UICharRefresh(&referee_recv_info->referee_id, up_chassis_status);
+
+    UICharDraw(&up_gimbal_status, "p06", UI_Graph_Change, 0, UI_Color_Orange, 20, 2, 1660, 700, "%s", gimbal_mode);
+    UICharRefresh(&referee_recv_info->referee_id, up_gimbal_status);
+
+    UICharDraw(&up_friction_status, "p07", UI_Graph_Change, 0, UI_Color_Orange, 20, 2, 1660, 650, "%s", friction_mode);
+    UICharRefresh(&referee_recv_info->referee_id, up_friction_status);
 }

@@ -64,7 +64,7 @@ void ShootTask(void const *argument) {
 #ifdef MCU_GIMBAL
         SubGetMessage(shoot_sub, &shoot_cmd_recv);
 
-        Calorie_Monitor(); //热量自检
+        // Calorie_Monitor(); //热量自检
 
         Shoot_Status_Serve();
 
@@ -140,11 +140,11 @@ static void Shoot_Init(void) {
     Load_bullet = DJI_Motor_Init(&Load);
 
     Friction.Can_Init_Config.tx_id = 2;
-    Friction.Control_Setting.Reverse_Flag = MOTOR_REVERSE;
+    Friction.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Friction_L = DJI_Motor_Init(&Friction);
 
     Friction.Can_Init_Config.tx_id = 3;
-    Friction.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
+    Friction.Control_Setting.Reverse_Flag =MOTOR_REVERSE ;
     Friction_R = DJI_Motor_Init(&Friction);
 
     Shoot_Data = (TMC_To_Gimbal_s *) CANCommGet(CANCOM); // 获取底盘与云台数据结构体实例
@@ -186,13 +186,13 @@ static void Shoot_Status_Serve(void) {
         now_heat = Shoot_Data->Shoot_Upload_Data.heat;
     }
 
-    FireContorl();//根据热量调整射频
+    // FireContorl();//根据热量调整射频
 
     // 摩擦轮控制,单位m/s
     switch (shoot_cmd_recv.friction_mode) {
         case FRICTION_ON:
-            DJI_MotorSetTarget(Friction_L, 13 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);//视觉模式为23m/s
-            DJI_MotorSetTarget(Friction_R, 13 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);//视觉模式为23m/s
+            DJI_MotorSetTarget(Friction_L, 23 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);//视觉模式为23m/s
+            DJI_MotorSetTarget(Friction_R, 23 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);//视觉模式为23m/s
             break;
         case FRICTION_OFF:
             DJI_MotorSetTarget(Friction_L, 0);
