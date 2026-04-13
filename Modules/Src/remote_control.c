@@ -80,8 +80,12 @@ void sbus_to_rc(const uint8_t* sbus_buf)
 
     for (uint16_t i = 0, j = 0x1; i < 16; j <<= 1, i++)
     {
-        if (i == 4 || i == 5) // 4,5位为ctrl和shift,直接跳过
+        if (i == 4 || i == 5) // 4,5位为ctrl和shift, 单独处理
+        {
+            if ((key_now & j) && !(key_last & j))
+                rc_ctrl[TEMP].key_count[KEY_PRESS][i]++;
             continue;
+        }
         // 如果当前按键按下,上一次按键没有按下,且ctrl和shift组合键没有按下,则按键按下计数加1(检测到上升沿)
         if ((key_now & j) && !(key_last & j) && !(key_with_ctrl & j) && !(key_with_shift & j))
             rc_ctrl[TEMP].key_count[KEY_PRESS][i]++;

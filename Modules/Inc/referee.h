@@ -66,7 +66,6 @@ typedef struct {
     friction_mode_e friction_mode; // 摩擦轮关闭
     Chassis_Power_Data_s Chassis_Power_Data; // 功率控制
     lid_mode_e lid_mode; // 盖子开关
-    Track_Mode_e track_mode;
 
 
     // 上一次的模式，用于flag判断
@@ -76,7 +75,6 @@ typedef struct {
     friction_mode_e friction_last_mode;
     lid_mode_e lid_last_mode;
     Chassis_Power_Data_s Chassis_last_Power_Data;
-    Track_Mode_e track_last_mode;
 } Referee_Interactive_info_t;
 
 #pragma pack()

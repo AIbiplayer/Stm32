@@ -19,7 +19,6 @@ static DJI_Motor_Instance *Instance_Group[DJI_MOTOR_CNT]; ///< 把所有电机�
 
 extern DJI_Motor_Instance *Gimbal_Yaw; ///<Yaw轴电机
 extern DJI_Motor_Instance *Load_bullet;
-extern DJI_Motor_Instance *Gimbal_Pitch; ///<Pitch轴电机
 
 /**
  * @brief 由于DJI电机发送以四个一组的形式进行,故对其进行特殊处理,用6个(2can*3group)can_instance专门负责发送
@@ -160,12 +159,12 @@ static void Decode_DJI_Motor(CANInstance *Instance) {
         Measure->Total_Angle = Measure->Total_Round * 360.0f + (Measure->Angle);
     }
 
-    if (DJI_Instance == Gimbal_Pitch) //pitch重力补偿
-    {
-        Measure->Total_Angle = ((float) (Measure->Ecd - PITCH_HORIZON_ECD) * ECD_ANGLE_COEF_DJI);
-        Measure->gravity_compensate = (Gimbal_Pitch_gravity * cosf(Measure->Total_Angle)) /
-                                      Torque_Constant_6020;
-    }
+    // if (DJI_Instance == Gimbal_Pitch) //pitch重力补偿
+    // {
+    //     Measure->Total_Angle = ((float) (Measure->Ecd - PITCH_HORIZON_ECD) * ECD_ANGLE_COEF_DJI);
+    //     Measure->gravity_compensate = (Gimbal_Pitch_gravity * cosf(Measure->Total_Angle)) /
+    //                                   Torque_Constant_6020;
+    // }
 }
 
 /**
@@ -176,7 +175,6 @@ void DJI_Motor_Control(void) {
     //对已注册的电机进行控制
     for (uint8_t i = 0; i < Idx; i++) {
         DJI_Motor_Instance *DJI_Instance = Instance_Group[i]; //使用指针提取电机实例
-        // Motor_DJI_Instance->Control_Setting_s DJI_Instance->Control_Setting = DJI_Instance->DJI_Instance->Control_Setting;
         const DJI_Motor_Measure_s Measure = DJI_Instance->Measure; //电机测量值
         float PID_Ref = DJI_Instance->Control_Setting.Target; //PID参考值
         float PID_Measure_Speed = 0.0f; //PID速度测量值
@@ -218,21 +216,21 @@ void DJI_Motor_Control(void) {
                       ? PID_Ref + *DJI_Instance->Control_Setting.Feedforward_Ptr
                       : PID_Ref;
 
-        DJI_Instance->Control_Setting.Power_Estimate = power_calculate(Measure.Current, Measure.Speed);
-        DJI_Instance->Control_Setting.Power_Output = (int16_t)PID_Ref;
+        DJI_Instance->Control_Setting.Power_Output = (int16_t) PID_Ref;
 
         //功率限制部分
         if (i != Idx - 1)
             continue;
-        power_limit();
+        // power_limit();
 
         for (uint8_t k = 0; k < Idx; k++) {
             DJI_Instance = Instance_Group[k];
             const uint8_t Group = DJI_Instance->Send_Group;
             const uint8_t InGroup_ID = DJI_Instance->Message_Num;
 
-            sender_assignment[Group].tx_buff[2 * InGroup_ID] = (uint8_t) (DJI_Instance->Control_Setting.Power_Output >> 8); //高八位
-            sender_assignment[Group].tx_buff[2 * InGroup_ID + 1] = (uint8_t) DJI_Instance->Control_Setting.Power_Output; //低八位
+            sender_assignment[Group].tx_buff[2 * InGroup_ID] = (uint8_t)(DJI_Instance->Control_Setting.Power_Output >> 8); //高八位
+            sender_assignment[Group].tx_buff[2 * InGroup_ID + 1] = (uint8_t) DJI_Instance->Control_Setting.Power_Output;
+            //低八位
 
             if (DJI_Instance->Working_Type == MOTOR_STOP)
                 memset(sender_assignment[Group].tx_buff + 2 * InGroup_ID, 0, 16u);

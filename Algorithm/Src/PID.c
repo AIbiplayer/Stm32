@@ -51,7 +51,9 @@ float PID_Calculate(PID_Typedef* PID_, float Target_, float Actual_)
     PID_->Error = Target_ - Actual_;
     // 死区处理
     if (fabsf(PID_->Error) < PID_->Dead_Zone)
-        return 0.0f;
+    {
+        PID_->Error = 0.0f;
+    }
     // 积分计算
     PID_->Error_Sum += PID_->Improve & Trapezoid_Intergral ? (PID_->Error + PID_->Last_Error) / 2 : PID_->Error;
     // 积分限幅：将积分累积值限制在 [-I_Limit, +I_Limit] 范围内

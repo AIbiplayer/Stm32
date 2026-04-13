@@ -36,7 +36,7 @@ static float Shoot_Relieve_Time = 0;
 static uint8_t Shoot_Relieve_Flag = 0;
 
 // 热量检测代码
-static shoot_detection_e shoot_state = SHOOT_DETECTION_STOP; //发射状态
+static shoot_detection_e shoot_state = SHOOT_DETECTION_STOP;  //发射状态
 static Shooter_Type_e shooter_type; //发射机构模式，爆发优先和冷却优先
 static float now_heat_cd = 0; //当前冷却值
 static float now_heat = 0; //17mm枪口当前热量

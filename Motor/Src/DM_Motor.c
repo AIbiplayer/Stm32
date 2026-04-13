@@ -8,6 +8,8 @@
 
 #include "DM_Motor.h"
 
+#include <sys/types.h>
+
 #include "cmsis_os.h"
 #include "main.h"
 #include "math.h"
@@ -18,28 +20,34 @@
 
 static uint8_t Idx = 0; ///< 电机索引
 static uint8_t Setting_Buffer[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00}; ///< 使能、失能等使用
+
+// 根据达妙手册填写
+static CANInstance sender_assignment = {
+    .can_handle = &hcan2, .txconf.StdId = 0x3FE, .txconf.IDE = CAN_ID_STD, .txconf.RTR = CAN_RTR_DATA,
+    .txconf.DLC = 0x08, .tx_buff = {0}
+}; ///< 达妙电机发送CAN实例，达妙电机协议为1拖4，后续可以根据协议进行调整
+
 static DM_Motor_Instance *DM_Instance_Group[DM_MOTOR_CNT]; ///< 把所有电机实例放到一个组，之后统一进行PID计算，注意这里是指针类型
 
 static void Decode_DM_Motor(CANInstance *Instance);
 
-static int float_to_uint(float x_float, float x_min, float x_max, int bits);
-
 static float uint_to_float(int x_int, float x_min, float x_max, int bits);
 
-static float degree_to_rad(int16_t degree);
+static float rad_to_degree(float rad);
 
 /**
  * @brief 注册达妙电机实例
  * @return 电机实例指针
+ * @todo 在达妙1拖4协议中，电机ID为0-3，CAN ID为0x201-0x204，这里需要根据协议进行设置
  */
 DM_Motor_Instance *DM_Motor_Init(DM_Motor_Init_s *Motor_Init) {
     DM_Motor_Instance *Instance = (DM_Motor_Instance *) malloc(sizeof(DM_Motor_Instance)); //创建动态内存，便于创造实例
     memset(Instance, 0, sizeof(DM_Motor_Instance));
-    Instance->Control_Setting = Motor_Init->DM_Control; //将电机部分内容转移
-    Instance->Work_Type = Motor_Init->Working_Type;
+    Instance->Control_Setting = Motor_Init->Control_Setting; //将电机部分内容转移
+    Instance->Control_Setting.Work_Type = Motor_Init->Control_Setting.Work_Type;
 
-    Motor_Init->Can_Init_Config.tx_id = Motor_Init->Mode + Motor_Init->Can_Init_Config.rx_id;
-    Motor_Init->Can_Init_Config.rx_id -= 1;
+    Instance->id = Motor_Init->Can_Init_Config.rx_id; //电机ID
+    Motor_Init->Can_Init_Config.rx_id = 0x300 + Motor_Init->Can_Init_Config.rx_id; //根据协议设置CAN ID
 
     Motor_Init->Can_Init_Config.can_module_callback = Decode_DM_Motor; //注册电机到CAN总线
     Motor_Init->Can_Init_Config.id = Instance;
@@ -50,31 +58,63 @@ DM_Motor_Instance *DM_Motor_Init(DM_Motor_Init_s *Motor_Init) {
 
 /**
  * @brief 对达妙电机进行控制并发送CAN
- * @todo 这里只控制位置速度模式，也就是说Target默认为角度，其它模式控制以后再添加
+ * @todo 这里为1拖4控制，和DJI一样
  */
 void DM_Motor_Control(void) {
     //对已注册的电机进行控制
     for (uint8_t i = 0; i < Idx; i++) {
-        const DM_Motor_Instance *DM_Instance = DM_Instance_Group[i]; //使用指针提取电机实例
-        DM_Control_Setting_s Control_Setting = DM_Instance->Control_Setting;
-        if (Control_Setting.Reverse_Flag == MOTOR_REVERSE) //判断取反
-            Control_Setting.a_target *= -1;
-        Control_Setting.a_target = degree_to_rad((int16_t) Control_Setting.a_target);
+        DM_Motor_Instance *DM_Instance = DM_Instance_Group[i]; //使用指针提取电机实例
+        float PID_Ref = DM_Instance->Control_Setting.Target; //PID参考值
+        const DM_Motor_Measure_s Measure = DM_Instance->Measure; //电机测量值
 
-        uint8_t *a_ptr = (uint8_t *) &Control_Setting.a_target;
-        uint8_t *v_ptr = (uint8_t *) &Control_Setting.v_target;
-        DM_Instance->Motor_Can_Instance->tx_buff[0] = *a_ptr;
-        DM_Instance->Motor_Can_Instance->tx_buff[1] = *(a_ptr + 1);
-        DM_Instance->Motor_Can_Instance->tx_buff[2] = *(a_ptr + 2);
-        DM_Instance->Motor_Can_Instance->tx_buff[3] = *(a_ptr + 3);
-        DM_Instance->Motor_Can_Instance->tx_buff[4] = *v_ptr;
-        DM_Instance->Motor_Can_Instance->tx_buff[5] = *(v_ptr + 1);
-        DM_Instance->Motor_Can_Instance->tx_buff[6] = *(v_ptr + 2);
-        DM_Instance->Motor_Can_Instance->tx_buff[7] = *(v_ptr + 3);
+        float PID_Measure_Speed = 0.0f; //PID速度测量值
+        float PID_Measure_Angle = 0.0f; //PID角度测量值
 
-        if (DM_Instance->Work_Type == MOTOR_ENABLE)
-            CANTransmit(DM_Instance->Motor_Can_Instance, 1); //发送CAN
+        if (DM_Instance->Control_Setting.Reverse_Flag == MOTOR_REVERSE) //判断取反
+            PID_Ref *= -1;
+
+        PID_Measure_Speed = DM_Instance->Control_Setting.Speed_Feedback_Source == OTHER_FEEDBACK
+                            && DM_Instance->Control_Setting.Other_Speed_Feedback_Ptr != NULL
+                                ? *DM_Instance->Control_Setting.Other_Speed_Feedback_Ptr
+                                : Measure.speed;
+
+        PID_Measure_Angle = DM_Instance->Control_Setting.Angle_Feedback_Source == OTHER_FEEDBACK
+                            && DM_Instance->Control_Setting.Other_Angle_Feedback_Ptr != NULL
+                                ? *DM_Instance->Control_Setting.Other_Angle_Feedback_Ptr
+                                : Measure.angle;
+
+        switch (DM_Instance->Control_Setting.Loop_Control) // 按闭环控制类型进行控制
+        {
+            case SPEED_CONTROL:
+                PID_Ref = PID_Calculate(&DM_Instance->Control_Setting.Speed_PID, PID_Ref, PID_Measure_Speed);
+                break;
+            case ANGLE_CONTROL:
+                PID_Ref = PID_Calculate(&DM_Instance->Control_Setting.Angle_PID, PID_Ref, PID_Measure_Angle);
+                break;
+            case ANGLE_SPEED_CONTROL:
+                PID_Ref = PID_Calculate(&DM_Instance->Control_Setting.Angle_PID, PID_Ref, PID_Measure_Angle);
+                PID_Ref = PID_Calculate(&DM_Instance->Control_Setting.Speed_PID, PID_Ref, PID_Measure_Speed);
+                break;
+            case SPEED_ANGLE_CONTROL:
+                PID_Ref = PID_Calculate(&DM_Instance->Control_Setting.Speed_PID, PID_Ref, PID_Measure_Speed);
+                PID_Ref = PID_Calculate(&DM_Instance->Control_Setting.Angle_PID, PID_Ref, PID_Measure_Angle);
+                break;
+            default: break;
+        }
+        PID_Ref = DM_Instance->Control_Setting.Feedforward_Flag == CURRENT_FEEDFORWARD
+                  && DM_Instance->Control_Setting.Feedforward_Ptr != NULL
+                      ? PID_Ref + *DM_Instance->Control_Setting.Feedforward_Ptr
+                      : PID_Ref;
+
+        DM_Instance->Control_Setting.Power_Output = (int16_t) PID_Ref;
+
+        sender_assignment.tx_buff[DM_Instance->id * 2] = (uint8_t) (DM_Instance->Control_Setting.Power_Output >> 8);
+        sender_assignment.tx_buff[DM_Instance->id * 2 + 1] = (uint8_t) DM_Instance->Control_Setting.Power_Output;
+
+        if (DM_Instance->Control_Setting.Work_Type == MOTOR_STOP)
+            memset(sender_assignment.tx_buff + DM_Instance->id * 2, 0, 16u);
     }
+    CANTransmit(&sender_assignment, 1);
 }
 
 /**
@@ -85,18 +125,33 @@ void Decode_DM_Motor(CANInstance *Instance) {
     const uint8_t *Rx_Buff = Instance->rx_buff;
     DM_Motor_Instance *DM_Instance = Instance->id;
     DM_Motor_Measure_s *Measure = &DM_Instance->Measure;
+    Measure->ecd = (uint16_t) Rx_Buff[0] << 8 | Rx_Buff[1];
+    Measure->angle = ((float) Measure->ecd * ECD_ANGLE_COEF_DJI);
+    Measure->speed = (int16_t) (Rx_Buff[2] << 8 | Rx_Buff[3]);
+    Measure->speed /= 100; // 达妙电机速度单位为rpm，除以100进行换算
+    Measure->current = (1.0f - CURRENT_SMOOTH_COEF) * Measure->current +
+                       CURRENT_SMOOTH_COEF * (float) ((int16_t) (Rx_Buff[4] << 8 | Rx_Buff[5]));
+    Measure->error = (DM_error_e) Rx_Buff[7];
+}
 
-    if ((Rx_Buff[0] & 0x0F) + 0x10 != Instance->rx_id)
-        return;
-
-    Measure->id = Rx_Buff[0] & 0x0F;
-    Measure->state = Rx_Buff[0] >> 4;
-    //@note 这里修改范围
-    Measure->pos = uint_to_float((uint16_t) ((Rx_Buff[1] << 8) | Rx_Buff[2]), -12.5f, 12.5f, 16);
-    Measure->vel = uint_to_float((uint16_t) ((Rx_Buff[3] << 4) | Rx_Buff[4] >> 4), -45.0f, 45.0f, 12);
-    Measure->tor = uint_to_float((uint16_t) (((Rx_Buff[4] & 0x0F) << 8) | Rx_Buff[5]), -18.0f, 18.0f, 12);
-
-    DM_Instance->Work_Type = Measure->state == 0 ? MOTOR_STOP : MOTOR_ENABLE;
+void Decode_dm_imu(CANInstance *Instance) {
+    const uint8_t *Rx_Buff = Instance->rx_buff;
+    DM_IMU_Instance_s *DM_IMU_Instance = Instance->id;
+    DM_IMU_Measure_s *Measure = &DM_IMU_Instance->Measure;
+    switch (Rx_Buff[0]) {
+        case 0x02: // Gyro
+            for (uint8_t i = 1; i < 4; i++) {
+                Measure->Gyro[i] = uint_to_float((int16_t) (Rx_Buff[i * 2] << 8 | Rx_Buff[1 + i * 2]), -2000.0f,
+                                                 2000.0f, 8);
+            }
+            break;
+        case 0x03: // Roll, Pitch, Yaw
+            Measure->Roll = uint_to_float((int16_t) (Rx_Buff[6] << 8 | Rx_Buff[7]), -180.0f, 180.0f, 16);
+            Measure->Pitch = uint_to_float((int16_t) (Rx_Buff[2] << 8 | Rx_Buff[3]), -180.0f, 180.0f, 16);
+            Measure->Yaw = uint_to_float((int16_t) (Rx_Buff[4] << 8 | Rx_Buff[5]), -180.0f, 180.0f, 16);
+            break;
+        default: break;
+    }
 }
 
 /**
@@ -138,19 +193,27 @@ static float uint_to_float(int x_int, float x_min, float x_max, int bits) {
 /**
  * @brief 电机启动
  */
-void DM_MotorEnable(DM_Motor_Instance *motor) {
-    Setting_Buffer[7] = 0xFC;
-    memcpy(motor->Motor_Can_Instance->tx_buff, Setting_Buffer, sizeof(Setting_Buffer));
-    CANTransmit(motor->Motor_Can_Instance, 1);
+void DM_MotorEnable(void) {
+    for (uint8_t i = 0; i < Idx; i++) {
+        DM_Motor_Instance *DM_Instance = DM_Instance_Group[i];
+        DM_Instance->Control_Setting.Work_Type = MOTOR_ENABLE;
+    }
+    // Setting_Buffer[7] = 0xFC;
+    // memcpy(motor->Motor_Can_Instance->tx_buff, Setting_Buffer, sizeof(Setting_Buffer));
+    // CANTransmit(motor->Motor_Can_Instance, 1);
 }
 
 /**
  * @brief 电机停止
  */
-void DM_MotorStop(DM_Motor_Instance *motor) {
-    Setting_Buffer[7] = 0xFD;
-    memcpy(motor->Motor_Can_Instance->tx_buff, Setting_Buffer, sizeof(Setting_Buffer));
-    CANTransmit(motor->Motor_Can_Instance, 1);
+void DM_MotorStop(void) {
+    for (uint8_t i = 0; i < Idx; i++) {
+        DM_Motor_Instance *DM_Instance = DM_Instance_Group[i];
+        DM_Instance->Control_Setting.Work_Type = MOTOR_STOP;
+    }
+    // Setting_Buffer[7] = 0xFD;
+    // memcpy(motor->Motor_Can_Instance->tx_buff, Setting_Buffer, sizeof(Setting_Buffer));
+    // CANTransmit(motor->Motor_Can_Instance, 1);
 }
 
 /**
@@ -182,26 +245,15 @@ void DM_MotorChangeReverse(DM_Motor_Instance *motor, const Motor_Reverse_Flag_e 
  * @brief 弧度角度换算
  * @return 弧度值
  */
-static float degree_to_rad(int16_t degree) {
-    degree = abs(degree) > 720 * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL
-                 ? 720 * REDUCTION_TRACK * REDUCTION_RATIO_WHEEL * abs(degree) / degree
-                 : degree;
-    float rad = (float) degree * M_PI / 180.0f;
-    return rad;
+static float rad_to_degree(float rad) {
+    float degree = (float) (rad * 180.0f / M_PI);
+    return degree;
 }
 
 /**
  * @brief 设置目标值
  * @param motor 电机实例指针
- * @param aTarget_ 目标角度 单位：度
- * @param vTarget_ 目标速度 单位：弧度每秒
  */
-void DM_MotorSet(DM_Motor_Instance *motor, float aTarget_, float vTarget_) {
-    aTarget_ = fabsf(aTarget_) > MAX_ANGLE_TRACK * REDUCTION_RATIO_WHEEL * REDUCTION_TRACK
-                   ? MAX_ANGLE_TRACK * REDUCTION_RATIO_WHEEL * REDUCTION_TRACK
-                   : aTarget_;
-    aTarget_ = aTarget_ < 0.0f ? 0.0f : aTarget_;
-    motor->Control_Setting.a_target_last = motor->Control_Setting.a_target;
-    motor->Control_Setting.a_target = aTarget_;
-    motor->Control_Setting.v_target = vTarget_;
+void DM_MotorSet(DM_Motor_Instance *motor, float Target_) {
+    motor->Control_Setting.Target = Target_;
 }

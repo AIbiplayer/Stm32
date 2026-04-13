@@ -9,6 +9,7 @@
 #include "cmsis_os.h"
 #include "INS.h"
 #include "TMC.h"
+#include "DM_Motor.h"
 #include "referee.h"
 #include "can_comm.h"
 
@@ -17,6 +18,9 @@ extern CANCommInstance *CANCOM; // 底盘或云台的CAN通信实例指针
 extern referee_info_t *Referee_data; // 裁判系统数据
 
 TMC_To_Gimbal_s *Gimbal_Rec; // 云台与底盘数据结构体实例
+DM_IMU_Instance_s DM_IMU; // 达妙IMU数据结构体实例
+
+static void IMU_Init(void);
 
 /**
  * @brief 陀螺仪任务
@@ -24,9 +28,9 @@ TMC_To_Gimbal_s *Gimbal_Rec; // 云台与底盘数据结构体实例
  */
 void INSTask(void const *argument) {
     taskENTER_CRITICAL();
-    Gimbal_IMU_Data = INS_Init();
-    LED_Green_Up;
-    Gimbal_Rec = (TMC_To_Gimbal_s *) CANCommGet(CANCOM);
+
+    IMU_Init();
+
     taskEXIT_CRITICAL();
     for (;;) {
         INS_Task();
@@ -38,4 +42,22 @@ void INSTask(void const *argument) {
 #endif
         osDelay(1);
     }
+}
+
+/**
+ * @brief 陀螺仪任务初始化
+ * @note 这里可以调整IMU参数
+ */
+void IMU_Init(void) {
+    Gimbal_IMU_Data = INS_Init();
+    Gimbal_Rec = (TMC_To_Gimbal_s *) CANCommGet(CANCOM);
+
+    DM_IMU.Can_Init_Config.can_handle = &hcan2;
+    DM_IMU.Can_Init_Config.rx_id = 0x014;
+    DM_IMU.Can_Init_Config.id = &DM_IMU;
+    DM_IMU.Can_Init_Config.can_module_callback = Decode_dm_imu;
+
+    DM_IMU.IMU_Can_Instance = CANRegister(&DM_IMU.Can_Init_Config);
+
+    LED_Green_Up;
 }
