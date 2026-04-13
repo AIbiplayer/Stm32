@@ -244,6 +244,7 @@ typedef struct {
 typedef struct {
     INS_t gimbal_imu_data;
     uint16_t yaw_motor_single_round_angle;
+    uint8_t yaw_motor_offline; // 新增：YAW电机离线/停止标志
 } Gimbal_Upload_Data_s;
 
 typedef struct {

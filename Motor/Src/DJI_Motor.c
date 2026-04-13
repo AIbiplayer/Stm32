@@ -228,11 +228,12 @@ void DJI_Motor_Control(void) {
             const uint8_t Group = DJI_Instance->Send_Group;
             const uint8_t InGroup_ID = DJI_Instance->Message_Num;
 
-            sender_assignment[Group].tx_buff[2 * InGroup_ID] = (uint8_t)(DJI_Instance->Control_Setting.Power_Output >> 8); //高八位
+            sender_assignment[Group].tx_buff[2 * InGroup_ID] = (uint8_t) (
+                DJI_Instance->Control_Setting.Power_Output >> 8); //高八位
             sender_assignment[Group].tx_buff[2 * InGroup_ID + 1] = (uint8_t) DJI_Instance->Control_Setting.Power_Output;
             //低八位
 
-            if (DJI_Instance->Working_Type == MOTOR_STOP)
+            if (DJI_Instance->Control_Setting.Work_Type == MOTOR_STOP)
                 memset(sender_assignment[Group].tx_buff + 2 * InGroup_ID, 0, 16u);
         }
     }
@@ -243,18 +244,23 @@ void DJI_Motor_Control(void) {
     }
 }
 
+void DJI_motor_offline(void *owner_id) {
+    DJI_Motor_Instance *DJI_Instance = (DJI_Motor_Instance *) owner_id;
+    DJI_Instance->Control_Setting.Work_Type = MOTOR_STOP;
+}
+
 /**
  * @brief 电机停止
  */
 void DJI_MotorStop(DJI_Motor_Instance *motor) {
-    motor->Working_Type = MOTOR_STOP;
+    motor->Control_Setting.Work_Type = MOTOR_STOP;
 }
 
 /**
  * @brief 电机启动
  */
 void DJI_MotorEnable(DJI_Motor_Instance *motor) {
-    motor->Working_Type = MOTOR_ENABLE;
+    motor->Control_Setting.Work_Type = MOTOR_ENABLE;
 }
 
 /**

@@ -13,6 +13,7 @@
 #include "cmsis_os.h"
 #include "main.h"
 #include "math.h"
+#include "daemon.h"
 #include "stdbool.h"
 #include "robot_def.h"
 #include "string.h"
@@ -122,6 +123,8 @@ void DM_Motor_Control(void) {
  * @note 修改测量范围在这里
  */
 void Decode_DM_Motor(CANInstance *Instance) {
+    DaemonReload(Instance->daemon_instance); // 每次收到数据都重载daemon，保证模块在线
+
     const uint8_t *Rx_Buff = Instance->rx_buff;
     DM_Motor_Instance *DM_Instance = Instance->id;
     DM_Motor_Measure_s *Measure = &DM_Instance->Measure;
@@ -141,17 +144,26 @@ void Decode_dm_imu(CANInstance *Instance) {
     switch (Rx_Buff[0]) {
         case 0x02: // Gyro
             for (uint8_t i = 1; i < 4; i++) {
-                Measure->Gyro[i] = uint_to_float((int16_t) (Rx_Buff[i * 2] << 8 | Rx_Buff[1 + i * 2]), -2000.0f,
-                                                 2000.0f, 8);
+                Measure->Gyro[i] = uint_to_float((uint16_t) (Rx_Buff[i * 2] << 8 | Rx_Buff[1 + i * 2]), -2000.0f,
+                                                 2000.0f, 16);
             }
             break;
         case 0x03: // Roll, Pitch, Yaw
-            Measure->Roll = uint_to_float((int16_t) (Rx_Buff[6] << 8 | Rx_Buff[7]), -180.0f, 180.0f, 16);
-            Measure->Pitch = uint_to_float((int16_t) (Rx_Buff[2] << 8 | Rx_Buff[3]), -180.0f, 180.0f, 16);
-            Measure->Yaw = uint_to_float((int16_t) (Rx_Buff[4] << 8 | Rx_Buff[5]), -180.0f, 180.0f, 16);
+            Measure->Roll = uint_to_float((uint16_t) (Rx_Buff[6] << 8 | Rx_Buff[7]), -180.0f, 180.0f, 16);
+            Measure->Pitch = uint_to_float((uint16_t) (Rx_Buff[2] << 8 | Rx_Buff[3]), -180.0f, 180.0f, 16);
+            Measure->Yaw = uint_to_float((uint16_t) (Rx_Buff[4] << 8 | Rx_Buff[5]), -180.0f, 180.0f, 16);
             break;
         default: break;
     }
+}
+
+/**
+ * @brief 达妙电机离线处理函数
+ * @note 这里简单地将工作类型设置为停止，后续可以根据需要进行优化，比如增加报警等
+ */
+void DM_motor_offline(void *owner_id) {
+    DM_Motor_Instance *DM_Instance = (DM_Motor_Instance *) owner_id;
+    DM_Instance->Control_Setting.Work_Type = MOTOR_STOP;
 }
 
 /**

@@ -11,6 +11,7 @@
 #include "TMC.h"
 #include "DM_Motor.h"
 #include "referee.h"
+#include "daemon.h"
 #include "can_comm.h"
 
 extern INS_t *Gimbal_IMU_Data; ///< 云台IMU数据
@@ -34,7 +35,7 @@ void INSTask(void const *argument) {
     taskEXIT_CRITICAL();
     for (;;) {
         INS_Task();
-
+        DaemonTask();
 #ifdef MCU_GIMBAL
         VisionSetAltitude(Gimbal_IMU_Data->Yaw, Gimbal_IMU_Data->Roll); //@todo 根据C板放置位置，Pitch和Roll调换位置
         VisionSend();

@@ -13,6 +13,7 @@
 #include "DM_Motor.h"
 #include "message_center.h"
 #include "TMC.h"
+#include "daemon.h"
 
 CCMRAM INS_t *Gimbal_IMU_Data; ///< 云台IMU数据
 CCMRAM DJI_Motor_Instance *Gimbal_Yaw; ///<Yaw轴电机
@@ -118,18 +119,18 @@ static void Gimbal_Init(void) {
     };
 
     PID_Param(&Yaw.Control_Setting.Speed_PID,
-              90.0f,
-              0.0f,
               1.0f,
+              0.0f,
+              0.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
               0,
               100,
               14000);
     PID_Param(&Yaw.Control_Setting.Angle_PID,
-              20.0f,
               0.0f,
-              400.0f,
+              0.0f,
+              0.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
               0,
@@ -172,6 +173,12 @@ static void Gimbal_Init(void) {
               1000,
               8000);
 
+    Daemon_Init_Config_s Yaw_Daemon_Config = {
+        .reload_count = 100, // 100ms超时
+        .init_count = 1000, // 1s上线等待时间
+        .callback = DJI_motor_offline, // 可以设置一个回调函数来处理离线情况
+    };
+
     Yaw.Can_Init_Config.tx_id = 2;
     Yaw.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Gimbal_Yaw = DJI_Motor_Init(&Yaw);
@@ -182,6 +189,9 @@ static void Gimbal_Init(void) {
     Pitch_down.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Gimbal_Pitch_Down = DM_Motor_Init(&Pitch_down);
 
+    Yaw_Daemon_Config.owner_id = &Gimbal_Yaw;
+    Gimbal_Pitch_Up->Motor_Can_Instance->daemon_instance = DaemonRegister(&Yaw_Daemon_Config); // 注册守护程序
+
     gimbal_pub = PubRegister("gimbal_feed", sizeof(Gimbal_Upload_Data_s));
     gimbal_sub = SubRegister("gimbal_cmd", sizeof(Gimbal_Ctrl_Cmd_s));
 }
@@ -190,7 +200,7 @@ static void Gimbal_Init(void) {
  * @brief 云台控制函数
  */
 static void Gimbal_Status_Serve(void) {
-    gimbal_cmd_recv.pitch = Angle_limit(gimbal_cmd_recv.pitch, 20.0f, -35.0f);
+    gimbal_cmd_recv.pitch = Angle_limit(gimbal_cmd_recv.pitch, PITCH_MAX_ANGLE, PITCH_MIN_ANGLE);
     switch (gimbal_cmd_recv.gimbal_mode) {
         case GIMBAL_DOWN:
             DJI_MotorSetTarget(Gimbal_Yaw,YAW_RESET_ANGLE); // 拨盘回零
@@ -215,4 +225,6 @@ static void Gimbal_Status_Serve(void) {
             break;
     }
     gimbal_feedback_data.yaw_motor_single_round_angle = (uint16_t) Gimbal_Yaw->Measure.Angle;
+    gimbal_feedback_data.gimbal_imu_data = *Gimbal_IMU_Data;
+    gimbal_feedback_data.yaw_motor_offline = Gimbal_Yaw->Control_Setting.Work_Type == MOTOR_STOP ? 1 : 0;
 }

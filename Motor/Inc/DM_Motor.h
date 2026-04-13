@@ -59,6 +59,8 @@ void DM_Motor_Control(void);
 
 void Decode_dm_imu(CANInstance *Instance);
 
+void DM_motor_offline(void *owner_id);
+
 void DM_MotorEnable(void);
 
 void DM_MotorStop(void);

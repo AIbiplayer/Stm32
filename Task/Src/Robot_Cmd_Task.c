@@ -30,7 +30,6 @@ CCMRAM float Timeout = 0.0f; // 遥控器信号丢失计时
 CCMRAM uint8_t Timeout_flag = 0; // 遥控器信号丢失标志
 CCMRAM Vision_Recv_s *vision_recv_data; // 视觉接收数据
 
-extern INS_t INS; // IMU数据,包含底盘的姿态和角速度等信息
 extern TMC_To_Chassis_s *Chassis_Rec; // 底盘与云台数据结构体实例
 extern TMC_To_Gimbal_s *Gimbal_Rec; // 云台与底盘数据结构体实例
 
@@ -109,6 +108,12 @@ void CmdTask(void *argument) {
 #ifdef MCU_GIMBAL
         SubGetMessage(gimbal_feed_sub, &gimbal_fetch_data);
         SubGetMessage(shoot_feed_sub, &shoot_fetch_data);
+
+        // 关键：在发送命令前同步 YAW 目标值
+        if (gimbal_fetch_data.yaw_motor_offline) {
+            // 电机处于 STOP 模式，将目标值同步为当前累计角度
+            gimbal_cmd_send.yaw = gimbal_fetch_data.gimbal_imu_data.YawTotalAngle;
+        }
 
         CalcOffsetAngle();
         Robot_Cmd_Serve();
@@ -278,6 +283,8 @@ static void Robot_Cmd_Serve(void) {
         VL_keyboard_cmd();
     else
         RemoteControl_Cmd();
+
+
 }
 
 /**
