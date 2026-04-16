@@ -34,8 +34,6 @@ static void Decode_DM_Motor(CANInstance *Instance);
 
 static float uint_to_float(int x_int, float x_min, float x_max, int bits);
 
-static float rad_to_degree(float rad);
-
 /**
  * @brief 注册达妙电机实例
  * @return 电机实例指针
@@ -45,10 +43,9 @@ DM_Motor_Instance *DM_Motor_Init(DM_Motor_Init_s *Motor_Init) {
     DM_Motor_Instance *Instance = (DM_Motor_Instance *) malloc(sizeof(DM_Motor_Instance)); //创建动态内存，便于创造实例
     memset(Instance, 0, sizeof(DM_Motor_Instance));
     Instance->Control_Setting = Motor_Init->Control_Setting; //将电机部分内容转移
-    Instance->Control_Setting.Work_Type = Motor_Init->Control_Setting.Work_Type;
 
+    Motor_Init->Can_Init_Config.rx_id = 0x300 + Motor_Init->Can_Init_Config.tx_id; //根据协议设置CAN ID
     Instance->id = Motor_Init->Can_Init_Config.rx_id; //电机ID
-    Motor_Init->Can_Init_Config.rx_id = 0x300 + Motor_Init->Can_Init_Config.rx_id; //根据协议设置CAN ID
 
     Motor_Init->Can_Init_Config.can_module_callback = Decode_DM_Motor; //注册电机到CAN总线
     Motor_Init->Can_Init_Config.id = Instance;
@@ -108,9 +105,9 @@ void DM_Motor_Control(void) {
                       : PID_Ref;
 
         DM_Instance->Control_Setting.Power_Output = (int16_t) PID_Ref;
-
-        sender_assignment.tx_buff[DM_Instance->id * 2] = (uint8_t) (DM_Instance->Control_Setting.Power_Output >> 8);
-        sender_assignment.tx_buff[DM_Instance->id * 2 + 1] = (uint8_t) DM_Instance->Control_Setting.Power_Output;
+        sender_assignment.tx_buff[(DM_Instance->id - 1) * 2 + 1] = (uint8_t) (
+            DM_Instance->Control_Setting.Power_Output >> 8);
+        sender_assignment.tx_buff[(DM_Instance->id - 1) * 2] = (uint8_t) DM_Instance->Control_Setting.Power_Output;
 
         if (DM_Instance->Control_Setting.Work_Type == MOTOR_STOP)
             memset(sender_assignment.tx_buff + DM_Instance->id * 2, 0, 16u);
@@ -123,8 +120,6 @@ void DM_Motor_Control(void) {
  * @note 修改测量范围在这里
  */
 void Decode_DM_Motor(CANInstance *Instance) {
-    DaemonReload(Instance->daemon_instance); // 每次收到数据都重载daemon，保证模块在线
-
     const uint8_t *Rx_Buff = Instance->rx_buff;
     DM_Motor_Instance *DM_Instance = Instance->id;
     DM_Motor_Measure_s *Measure = &DM_Instance->Measure;
@@ -144,14 +139,14 @@ void Decode_dm_imu(CANInstance *Instance) {
     switch (Rx_Buff[0]) {
         case 0x02: // Gyro
             for (uint8_t i = 1; i < 4; i++) {
-                Measure->Gyro[i] = uint_to_float((uint16_t) (Rx_Buff[i * 2] << 8 | Rx_Buff[1 + i * 2]), -2000.0f,
-                                                 2000.0f, 16);
+                Measure->Gyro[i - 1] = uint_to_float((uint16_t) (Rx_Buff[i * 2 + 1] << 8 | Rx_Buff[i * 2]),
+                                                     -2000.0f, 2000.0f, 16);
             }
             break;
         case 0x03: // Roll, Pitch, Yaw
-            Measure->Roll = uint_to_float((uint16_t) (Rx_Buff[6] << 8 | Rx_Buff[7]), -180.0f, 180.0f, 16);
-            Measure->Pitch = uint_to_float((uint16_t) (Rx_Buff[2] << 8 | Rx_Buff[3]), -180.0f, 180.0f, 16);
-            Measure->Yaw = uint_to_float((uint16_t) (Rx_Buff[4] << 8 | Rx_Buff[5]), -180.0f, 180.0f, 16);
+            Measure->Roll = uint_to_float((uint16_t) (Rx_Buff[7] << 8 | Rx_Buff[6]), -180.0f, 180.0f, 16);
+            Measure->Pitch = uint_to_float((uint16_t) (Rx_Buff[3] << 8 | Rx_Buff[2]), -180.0f, 180.0f, 16);
+            Measure->Yaw = uint_to_float((uint16_t) (Rx_Buff[5] << 8 | Rx_Buff[4]), -180.0f, 180.0f, 16);
             break;
         default: break;
     }

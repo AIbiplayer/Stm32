@@ -86,11 +86,6 @@ static void VL_keyboard_cmd(void);
 
 static void Keyboard_Cmd(void);
 
-static void Chassis_data_tidy(void);
-
-static void UI_Update_Upgroup_Data(void);
-
-static void UI_Init_Check(void);
 
 /**
  * @brief 命令读取与发送FreeRTOS任务
@@ -267,8 +262,9 @@ static void Robot_Cmd_Serve(void) {
     // 左右两杆均拨下，紧急断电
     chassis_cmd_send.chassis_last_mode = chassis_cmd_send.chassis_mode;
 
-    if ((RC_data != NULL && switch_is_down(RC_data[TEMP].rc.switch_left) && switch_is_down(RC_data[TEMP].rc.switch_right)) ||
-        (VL_data != NULL && VL_data[TEMP].rc.mode_sw != 0) || Timeout_flag) {
+    if ((RC_data != NULL && switch_is_down(RC_data[TEMP].rc.switch_left) && switch_is_down(
+             RC_data[TEMP].rc.switch_right)) ||
+        (VL_data != NULL && VL_data[TEMP].rc.mode_sw == 2) || Timeout_flag) {
         Emergency_Stop();
         return;
     }
@@ -279,12 +275,10 @@ static void Robot_Cmd_Serve(void) {
     // 键盘控制优先级最高，图传遥控器次之，遥控器优先级最低
     if ((switch_is_up(RC_data[TEMP].rc.switch_left) && switch_is_up(RC_data[TEMP].rc.switch_right)))
         Keyboard_Cmd();
-    else if (VL_data != NULL && VL_data[TEMP].rc.mode_sw == 0)
+    else if (VL_data != NULL && VL_data[TEMP].rc.mode_sw == 1)
         VL_keyboard_cmd();
     else
         RemoteControl_Cmd();
-
-
 }
 
 /**

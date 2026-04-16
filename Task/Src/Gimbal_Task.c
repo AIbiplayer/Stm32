@@ -27,6 +27,10 @@ static Subscriber_t *gimbal_sub; // cmd控制消息订阅者
 static Gimbal_Upload_Data_s gimbal_feedback_data; // 回传给cmd的云台状态信息
 static Gimbal_Ctrl_Cmd_s gimbal_cmd_recv; // 来自cmd的控制信息
 
+float PT, PA, PP; // Pitch轴目标角度和实际角度
+float PAKP = 0, PAKI = 0, PAKD = 0; // Pitch轴角度环PID参数
+float PSKP = 0, PSKI = 0, PSKD = 0;
+
 static void Gimbal_Init(void);
 
 static void Gimbal_Status_Serve(void);
@@ -45,16 +49,17 @@ void GimbalTask(void const *argument) {
 #ifdef MCU_GIMBAL
         SubGetMessage(gimbal_sub, &gimbal_cmd_recv);
 
-        // PT = Gimbal_Pitch->Control_Setting.Target;
-        // PA = Gimbal_Pitch->Control_Setting.Angle_PID.Actual;
+        PT = Gimbal_Pitch_Down->Control_Setting.Target;
+        PA = Gimbal_Pitch_Down->Control_Setting.Angle_PID.Actual;
+        PP = Gimbal_Pitch_Down->Control_Setting.Power_Output;
         // YT = Gimbal_Yaw->Control_Setting.Target;
         // YA = Gimbal_Yaw->Control_Setting.Angle_PID.Actual;
-        // Gimbal_Pitch->Control_Setting.Angle_PID.Kp = PAKP;
-        // Gimbal_Pitch->Control_Setting.Angle_PID.Ki = PAKI;
-        // Gimbal_Pitch->Control_Setting.Angle_PID.Kd = PAKD;
-        // Gimbal_Pitch->Control_Setting.Speed_PID.Kp = PSKP;
-        // Gimbal_Pitch->Control_Setting.Speed_PID.Ki = PSKI;
-        // Gimbal_Pitch->Control_Setting.Speed_PID.Kd = PSKD;
+        Gimbal_Pitch_Down->Control_Setting.Angle_PID.Kp = PAKP;
+        Gimbal_Pitch_Down->Control_Setting.Angle_PID.Ki = PAKI;
+        Gimbal_Pitch_Down->Control_Setting.Angle_PID.Kd = PAKD;
+        Gimbal_Pitch_Down->Control_Setting.Speed_PID.Kp = PSKP;
+        Gimbal_Pitch_Down->Control_Setting.Speed_PID.Ki = PSKI;
+        Gimbal_Pitch_Down->Control_Setting.Speed_PID.Kd = PSKD;
         // Gimbal_Yaw->Control_Setting.Angle_PID.Kp = YAKP;
         // Gimbal_Yaw->Control_Setting.Angle_PID.Ki = YAKI;
         // Gimbal_Yaw->Control_Setting.Angle_PID.Kd = YAKD;
@@ -119,7 +124,7 @@ static void Gimbal_Init(void) {
     };
 
     PID_Param(&Yaw.Control_Setting.Speed_PID,
-              1.0f,
+              0.0f,
               0.0f,
               0.0f,
               Integral_Limit | Derivative_On_Measurement,
@@ -137,7 +142,7 @@ static void Gimbal_Init(void) {
               1000,
               14000);
     PID_Param(&Pitch_up.Control_Setting.Speed_PID,
-              1.0f,
+              0.0f,
               0,
               0.0f,
               Integral_Limit | Derivative_On_Measurement,
@@ -146,7 +151,7 @@ static void Gimbal_Init(void) {
               1000,
               8000);
     PID_Param(&Pitch_up.Control_Setting.Angle_PID,
-              1.0f,
+              0.0f,
               0.0f,
               0.0f,
               Integral_Limit | Derivative_On_Measurement,
@@ -182,15 +187,15 @@ static void Gimbal_Init(void) {
     Yaw.Can_Init_Config.tx_id = 2;
     Yaw.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Gimbal_Yaw = DJI_Motor_Init(&Yaw);
-    Pitch_up.Can_Init_Config.tx_id = 2;
+    Pitch_up.Can_Init_Config.tx_id = 1;
     Pitch_up.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Gimbal_Pitch_Up = DM_Motor_Init(&Pitch_up);
-    Pitch_down.Can_Init_Config.tx_id = 1;
+    Pitch_down.Can_Init_Config.tx_id = 2;
     Pitch_down.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Gimbal_Pitch_Down = DM_Motor_Init(&Pitch_down);
 
     Yaw_Daemon_Config.owner_id = &Gimbal_Yaw;
-    Gimbal_Pitch_Up->Motor_Can_Instance->daemon_instance = DaemonRegister(&Yaw_Daemon_Config); // 注册守护程序
+    Gimbal_Yaw->Motor_Can_Instance->daemon_instance = DaemonRegister(&Yaw_Daemon_Config); // 注册守护程序
 
     gimbal_pub = PubRegister("gimbal_feed", sizeof(Gimbal_Upload_Data_s));
     gimbal_sub = SubRegister("gimbal_cmd", sizeof(Gimbal_Ctrl_Cmd_s));
@@ -203,25 +208,22 @@ static void Gimbal_Status_Serve(void) {
     gimbal_cmd_recv.pitch = Angle_limit(gimbal_cmd_recv.pitch, PITCH_MAX_ANGLE, PITCH_MIN_ANGLE);
     switch (gimbal_cmd_recv.gimbal_mode) {
         case GIMBAL_DOWN:
+            DJI_MotorEnable(Gimbal_Yaw);
+            DM_MotorEnable();
             DJI_MotorSetTarget(Gimbal_Yaw,YAW_RESET_ANGLE); // 拨盘回零
-            DM_MotorSet(Gimbal_Pitch_Up, PITCH_RESET_ANGLE); // 小Pitch回零
-            DM_MotorSet(Gimbal_Pitch_Down, PITCH_HOLD_RESET_ANGLE); // 大Pitch回零
+            // DM_MotorSet(Gimbal_Pitch_Up, PITCH_RESET_ANGLE); // 小Pitch回零
+            // DM_MotorSet(Gimbal_Pitch_Down, PITCH_HOLD_RESET_ANGLE); // 大Pitch回零
             // 重置PID积分
             break;
         case GIMBAL_NONE:
             DJI_MotorStop(Gimbal_Yaw);
             DM_MotorStop();
-            PID_Clean_I(&Gimbal_Yaw->Control_Setting.Angle_PID);
-            PID_Clean_I(&Gimbal_Yaw->Control_Setting.Speed_PID);
-            PID_Clean_I(&Gimbal_Pitch_Up->Control_Setting.Angle_PID);
-            PID_Clean_I(&Gimbal_Pitch_Up->Control_Setting.Speed_PID);
-            PID_Clean_I(&Gimbal_Pitch_Down->Control_Setting.Angle_PID);
-            PID_Clean_I(&Gimbal_Pitch_Down->Control_Setting.Speed_PID);
             break;
         default:
+            DM_MotorEnable();
             DJI_MotorSetTarget(Gimbal_Yaw, gimbal_cmd_recv.yaw);
-            DM_MotorSet(Gimbal_Pitch_Up, gimbal_cmd_recv.pitch);
-            DM_MotorSet(Gimbal_Pitch_Down, PITCH_HOLD_EXTEND_ANGLE);
+            // DM_MotorSet(Gimbal_Pitch_Up, gimbal_cmd_recv.pitch);
+            DM_MotorSet(Gimbal_Pitch_Down, gimbal_cmd_recv.pitch);
             break;
     }
     gimbal_feedback_data.yaw_motor_single_round_angle = (uint16_t) Gimbal_Yaw->Measure.Angle;

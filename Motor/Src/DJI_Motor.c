@@ -159,6 +159,9 @@ static void Decode_DJI_Motor(CANInstance *Instance) {
         Measure->Total_Angle = Measure->Total_Round * 360.0f + (Measure->Angle);
     }
 
+    DaemonReload(Instance->daemon_instance); // 每次收到数据都重载daemon，保证模块在线
+
+
     // if (DJI_Instance == Gimbal_Pitch) //pitch重力补偿
     // {
     //     Measure->Total_Angle = ((float) (Measure->Ecd - PITCH_HORIZON_ECD) * ECD_ANGLE_COEF_DJI);

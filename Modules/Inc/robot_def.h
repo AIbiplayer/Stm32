@@ -27,7 +27,7 @@
 #define PITCH_RESET_ANGLE 50.0f // 云台重置时的角度
 #define PITCH_HOLD_RESET_ANGLE 50.0f // 云台重置时的俯仰角,用于发射时保持云台不动,如果云台重置时的俯仰角和PITCH_RESET_ANGLE不同则需要修改
 #define PITCH_HOLD_EXTEND_ANGLE 50.0f // 保持云台不动的俯仰角,如果云台上台阶时的俯仰角和PITCH_RESET_ANGLE不同则需要修改
-#define PITCH_MAX_ANGLE 20.90f           // 云台竖直方向最大角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
+#define PITCH_MAX_ANGLE 80.0f           // 云台竖直方向最大角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
 #define PITCH_MIN_ANGLE -23.00f           // 云台竖直方向最小角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
 // 发射参数
 #define SHOOT_COMPENSATION_K 1.5f // 发射补偿系数,用于调节发射速度与距离的关系 todo 具体数值待调试
