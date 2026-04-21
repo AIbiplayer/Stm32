@@ -79,7 +79,7 @@ void DM_Motor_Control(void) {
         PID_Measure_Angle = DM_Instance->Control_Setting.Angle_Feedback_Source == OTHER_FEEDBACK
                             && DM_Instance->Control_Setting.Other_Angle_Feedback_Ptr != NULL
                                 ? *DM_Instance->Control_Setting.Other_Angle_Feedback_Ptr
-                                : Measure.angle;
+                                : Measure.total_angle;
 
         switch (DM_Instance->Control_Setting.Loop_Control) // 按闭环控制类型进行控制
         {
@@ -130,6 +130,7 @@ void Decode_DM_Motor(CANInstance *Instance) {
     Measure->current = (1.0f - CURRENT_SMOOTH_COEF) * Measure->current +
                        CURRENT_SMOOTH_COEF * (float) ((int16_t) (Rx_Buff[4] << 8 | Rx_Buff[5]));
     Measure->error = (DM_error_e) Rx_Buff[7];
+    Measure->total_angle = ((float) (Measure->ecd - PITCH_HORIZON_ECD) * ECD_ANGLE_COEF_DJI);
 }
 
 void Decode_dm_imu(CANInstance *Instance) {

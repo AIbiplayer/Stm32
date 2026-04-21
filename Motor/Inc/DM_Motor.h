@@ -38,6 +38,7 @@ typedef struct {
     float angle; ///< 角度，单位°
     float speed; ///< 速度，单位rpm
     float current; ///< 电流值，单位mA
+    float total_angle; ///< 累计角度，单位°
 } DM_Motor_Measure_s; ///< 达妙电机测量值
 
 typedef struct {

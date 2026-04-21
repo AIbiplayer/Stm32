@@ -27,7 +27,7 @@ static Subscriber_t *gimbal_sub; // cmd控制消息订阅者
 static Gimbal_Upload_Data_s gimbal_feedback_data; // 回传给cmd的云台状态信息
 static Gimbal_Ctrl_Cmd_s gimbal_cmd_recv; // 来自cmd的控制信息
 
-float PT, PA, PP; // Pitch轴目标角度和实际角度
+float PT, PA, PP, PSA, PST; // Pitch轴目标角度和实际角度
 float PAKP = 0, PAKI = 0, PAKD = 0; // Pitch轴角度环PID参数
 float PSKP = 0, PSKI = 0, PSKD = 0;
 
@@ -51,6 +51,8 @@ void GimbalTask(void const *argument) {
 
         PT = Gimbal_Pitch_Down->Control_Setting.Target;
         PA = Gimbal_Pitch_Down->Control_Setting.Angle_PID.Actual;
+        PSA = Gimbal_Pitch_Down->Control_Setting.Speed_PID.Actual;
+        PST = Gimbal_Pitch_Down->Control_Setting.Speed_PID.Target;
         PP = Gimbal_Pitch_Down->Control_Setting.Power_Output;
         // YT = Gimbal_Yaw->Control_Setting.Target;
         // YA = Gimbal_Yaw->Control_Setting.Angle_PID.Actual;
@@ -191,7 +193,7 @@ static void Gimbal_Init(void) {
     Pitch_up.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Gimbal_Pitch_Up = DM_Motor_Init(&Pitch_up);
     Pitch_down.Can_Init_Config.tx_id = 2;
-    Pitch_down.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
+    Pitch_down.Control_Setting.Reverse_Flag = MOTOR_REVERSE;
     Gimbal_Pitch_Down = DM_Motor_Init(&Pitch_down);
 
     Yaw_Daemon_Config.owner_id = &Gimbal_Yaw;
@@ -210,7 +212,7 @@ static void Gimbal_Status_Serve(void) {
         case GIMBAL_DOWN:
             DJI_MotorEnable(Gimbal_Yaw);
             DM_MotorEnable();
-            DJI_MotorSetTarget(Gimbal_Yaw,YAW_RESET_ANGLE); // 拨盘回零
+            // DJI_MotorSetTarget(Gimbal_Yaw,YAW_RESET_ANGLE); // 拨盘回零
             // DM_MotorSet(Gimbal_Pitch_Up, PITCH_RESET_ANGLE); // 小Pitch回零
             // DM_MotorSet(Gimbal_Pitch_Down, PITCH_HOLD_RESET_ANGLE); // 大Pitch回零
             // 重置PID积分

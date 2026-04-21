@@ -43,7 +43,10 @@ add_executable(${CMAKE_PROJECT_NAME}
         Algorithm/Inc/alg_queue.h
         Algorithm/Src/alg_queue.c
         Modules/Src/super_cap.c
-        Modules/Inc/super_cap.h)
+        Modules/Inc/super_cap.h
+        Algorithm/Inc/Trajectory_planning.h
+        Algorithm/Src/Trajectory_planning.cpp
+        Algorithm/Inc/Pos.h)
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
