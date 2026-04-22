@@ -21,14 +21,14 @@
 // 云台参数
 #define YAW_ALIGN_ANGLE (YAW_CHASSIS_ALIGN_ECD * ECD_ANGLE_COEF_DJI) // 对齐时的角度,0-360
 #define YAW_CHASSIS_ALIGN_ECD 1800// 云台和底盘对齐指向相同方向时的电机编码器值,若对云台有机械改动需要修改
-#define YAW_RESET_ANGLE 180.0f // 云台重置时的角度
+#define YAW_RESET_ANGLE 15.0f // 云台重置时的角度
 #define YAW_ECD_GREATER_THAN_4096 0 // ALIGN_ECD值是否大于4096,是为1,否为0;用于计算云台偏转角度
 #define PITCH_HORIZON_ECD 2304      // 云台处于水平位置时编码器值,若对云台有机械改动需要修改
-#define PITCH_RESET_ANGLE 50.0f // 云台重置时的角度
-#define PITCH_HOLD_RESET_ANGLE 50.0f // 云台重置时的俯仰角,用于发射时保持云台不动,如果云台重置时的俯仰角和PITCH_RESET_ANGLE不同则需要修改
-#define PITCH_HOLD_EXTEND_ANGLE 50.0f // 保持云台不动的俯仰角,如果云台上台阶时的俯仰角和PITCH_RESET_ANGLE不同则需要修改
-#define PITCH_MAX_ANGLE 80.0f           // 云台竖直方向最大角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
-#define PITCH_MIN_ANGLE -23.00f           // 云台竖直方向最小角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
+#define PITCH_RESET_ANGLE 25.0f // 云台重置时的角度
+#define PITCH_HOLD_RESET_ANGLE 0.0f // 云台重置时的俯仰角,用于发射时保持云台不动,如果云台重置时的俯仰角和PITCH_RESET_ANGLE不同则需要修改
+#define PITCH_HOLD_EXTEND_ANGLE 90.0f // 保持云台不动的俯仰角,如果云台上台阶时的俯仰角和PITCH_RESET_ANGLE不同则需要修改
+#define PITCH_MAX_ANGLE 25.0f           // 云台竖直方向最大角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
+#define PITCH_MIN_ANGLE -25.00f           // 云台竖直方向最小角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
 // 发射参数
 #define SHOOT_COMPENSATION_K 1.5f // 发射补偿系数,用于调节发射速度与距离的关系 todo 具体数值待调试
 #define ONE_BULLET_DELTA_ANGLE  36.00f   // 发射一发弹丸拨盘转动的距离,由机械设计图纸给出
@@ -154,7 +154,7 @@ typedef enum {
     GIMBAL_NONE = 0, // 断电模式
     GIMBAL_GYRO_MODE, // 云台陀螺仪反馈模式,反馈值为陀螺仪pitch,total_yaw_angle,底盘可以为小陀螺和跟随模式
     GIMBAL_VISION, //自瞄模式
-    GIMBAL_DOWN // 云台缩紧模式
+    GIMBAL_TIGHTEN // 云台缩紧模式
 } gimbal_mode_e;
 
 // 发射模式设置

@@ -12,7 +12,6 @@
 extern osSemaphoreId RC_Parse_FlagHandle;
 extern USARTInstance* rc_usart_instance;
 
-
 // 遥控器数据
 RC_ctrl_t rc_ctrl[2]; //[0]:当前数据TEMP,[1]:上一次的数据LAST.用于按键持续按下和切换的判断
 static uint8_t rc_init_flag = 0; // 遥控器初始化标志位

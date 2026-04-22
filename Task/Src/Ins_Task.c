@@ -37,7 +37,7 @@ void INSTask(void const *argument) {
         INS_Task();
         DaemonTask();
 #ifdef MCU_GIMBAL
-        VisionSetAltitude(Gimbal_IMU_Data->Yaw, Gimbal_IMU_Data->Roll); //@todo 根据C板放置位置，Pitch和Roll调换位置
+        VisionSetAltitude(Gimbal_IMU_Data->Yaw, DM_IMU.Measure.Roll); //@todo 根据C板放置位置，Pitch和Roll调换位置
         VisionSend();
 
 #endif

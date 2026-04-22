@@ -8,6 +8,7 @@
 #include "bsp_dwt.h"
 #include "bsp_usb.h"
 #include  "usb_device.h"
+#include "math.h"
 #include "main.h"
 #include  "referee.h"
 #include "DM_Motor.h"
@@ -16,6 +17,7 @@
 #include "remote_control.h"
 #include "message_center.h"
 #include "robot_def.h"
+#include "Pos.h"
 #include "super_cap.h"
 #include "Video_link.h"
 #include "TMC.h"
@@ -86,6 +88,10 @@ static void VL_keyboard_cmd(void);
 
 static void Keyboard_Cmd(void);
 
+static void Gimbal_Mode_Transition_Handle(void);
+
+static float GetNearestYawTightenTarget(float current_yaw);
+
 
 /**
  * @brief 命令读取与发送FreeRTOS任务
@@ -104,16 +110,15 @@ void CmdTask(void *argument) {
         SubGetMessage(gimbal_feed_sub, &gimbal_fetch_data);
         SubGetMessage(shoot_feed_sub, &shoot_fetch_data);
 
-        // 关键：在发送命令前同步 YAW 目标值
-        if (gimbal_fetch_data.yaw_motor_offline) {
-            // 电机处于 STOP 模式，将目标值同步为当前累计角度
+        CalcOffsetAngle();
+        Robot_Cmd_Serve();
+        Gimbal_Mode_Transition_Handle();
+
+        if (gimbal_cmd_send.gimbal_mode == GIMBAL_NONE || gimbal_fetch_data.yaw_motor_offline) {
             gimbal_cmd_send.yaw = gimbal_fetch_data.gimbal_imu_data.YawTotalAngle;
         }
 
-        CalcOffsetAngle();
-        Robot_Cmd_Serve();
-
-        if (gimbal_cmd_send.gimbal_mode == GIMBAL_DOWN) {
+        if (gimbal_cmd_send.gimbal_mode == GIMBAL_TIGHTEN) {
             shoot_cmd_send.shoot_mode = SHOOT_OFF; // 云台缩紧模式强制关闭射击
             shoot_cmd_send.load_mode = LOAD_STOP;
             shoot_cmd_send.friction_mode = FRICTION_OFF;
@@ -232,6 +237,9 @@ static void Robot_Cmd_Init(void) {
     gimbal_feed_sub = SubRegister("gimbal_feed", sizeof(Gimbal_Upload_Data_s));
     shoot_cmd_pub = PubRegister("shoot_cmd", sizeof(Shoot_Ctrl_Cmd_s));
     shoot_feed_sub = SubRegister("shoot_feed", sizeof(Shoot_Upload_Data_s));
+    gimbal_cmd_send.gimbal_mode = GIMBAL_TIGHTEN;
+    gimbal_cmd_send.yaw = YAW_TIGHTEN_ANGLE;
+    gimbal_cmd_send.pitch = PITCH_HEAD_ANGLE;
 }
 
 /**
@@ -252,6 +260,51 @@ static void CalcOffsetAngle(void) {
         gimbal_cmd_send.angle_offset_g = chassis_cmd_send.offset_angle - 360.0f;
     else
         gimbal_cmd_send.angle_offset_g = chassis_cmd_send.offset_angle;
+}
+
+static float GetNearestYawTightenTarget(float current_yaw) {
+    return YAW_TIGHTEN_ANGLE + roundf((current_yaw - YAW_TIGHTEN_ANGLE) / GIMBAL_ANGLE_PERIOD) * GIMBAL_ANGLE_PERIOD;
+}
+
+static void Gimbal_Mode_Transition_Handle(void) {
+    static gimbal_mode_e last_gimbal_mode = GIMBAL_NONE;
+    static uint8_t first_enable_pending = 1;
+    static uint16_t release_hold_ticks = 0;
+    static float latched_tighten_yaw_target = YAW_TIGHTEN_ANGLE;
+
+    if (gimbal_cmd_send.gimbal_mode == GIMBAL_TIGHTEN && last_gimbal_mode != GIMBAL_TIGHTEN) {
+        latched_tighten_yaw_target = GetNearestYawTightenTarget(gimbal_cmd_send.yaw);
+    }
+
+    if (release_hold_ticks > 0 &&
+        gimbal_cmd_send.gimbal_mode != GIMBAL_NONE &&
+        gimbal_cmd_send.gimbal_mode != GIMBAL_TIGHTEN) {
+        gimbal_cmd_send.yaw = latched_tighten_yaw_target;
+        gimbal_cmd_send.pitch = PITCH_HEAD_ANGLE;
+        gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
+        release_hold_ticks--;
+    }
+
+    if (first_enable_pending && gimbal_cmd_send.gimbal_mode != GIMBAL_NONE) {
+        latched_tighten_yaw_target = YAW_TIGHTEN_ANGLE;
+        gimbal_cmd_send.yaw = latched_tighten_yaw_target;
+        gimbal_cmd_send.pitch = PITCH_HEAD_ANGLE;
+        gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
+        first_enable_pending = 0;
+        release_hold_ticks = (uint16_t) (PITCH_DOWN_RELEASE_DURATION * 500.0f) + 20u;
+    } else if (gimbal_cmd_send.gimbal_mode == GIMBAL_VISION &&
+               (last_gimbal_mode == GIMBAL_TIGHTEN || last_gimbal_mode == GIMBAL_NONE)) {
+        gimbal_cmd_send.yaw = latched_tighten_yaw_target;
+        gimbal_cmd_send.pitch = PITCH_HEAD_ANGLE;
+        gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
+        release_hold_ticks = (uint16_t) (PITCH_DOWN_RELEASE_DURATION * 500.0f) + 20u;
+    } else if (gimbal_cmd_send.gimbal_mode == GIMBAL_GYRO_MODE && last_gimbal_mode == GIMBAL_TIGHTEN) {
+        gimbal_cmd_send.yaw = latched_tighten_yaw_target;
+        gimbal_cmd_send.pitch = PITCH_HEAD_ANGLE;
+        release_hold_ticks = (uint16_t) (PITCH_DOWN_RELEASE_DURATION * 500.0f) + 20u;
+    }
+
+    last_gimbal_mode = gimbal_cmd_send.gimbal_mode;
 }
 
 /**
@@ -307,7 +360,7 @@ static void VL_keyboard_cmd(void) {
         chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW; // 默认底盘跟随云台yaw
 
     if (VL_data[TEMP].key_count[KEY_PRESS][Key_C] % 2 == 1) // C键切换云台缩紧模式
-        gimbal_cmd_send.gimbal_mode = GIMBAL_DOWN;
+        gimbal_cmd_send.gimbal_mode = GIMBAL_TIGHTEN;
     else gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
 
     //WASD方向平移
@@ -354,37 +407,36 @@ static void VL_keyboard_cmd(void) {
         }
     } else shoot_cmd_send.load_mode = LOAD_STOP; //停止发射
 
-    if (VL_data[TEMP].mouse.mouse_right && gimbal_cmd_send.gimbal_mode != GIMBAL_DOWN) //长按鼠标右键进入自瞄模式
-    {
-        gimbal_cmd_send.gimbal_mode = GIMBAL_VISION; //只做头部跟随
-        chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
-        gimbal_cmd_send.yaw = vision_recv_data->gimbal_data.yaw;
-        gimbal_cmd_send.pitch = vision_recv_data->gimbal_data.pitch;
-        gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, PITCH_MAX_ANGLE, PITCH_MIN_ANGLE);
-        if (VL_data[TEMP].mouse.mouse_left && vision_recv_data->fire_control_data.fire_flag)
-        //鼠标左键短按单发，长按连发，前提是视觉模块的fire_flag为真
+    if (gimbal_cmd_send.gimbal_mode != GIMBAL_TIGHTEN) {
+        if (VL_data[TEMP].mouse.mouse_right) //长按鼠标右键进入自瞄模式
         {
-            switch (VL_data[TEMP].key_count[KEY_PRESS][Key_R] % 2) // R键切换单发连发模式
+            gimbal_cmd_send.gimbal_mode = GIMBAL_VISION; //只做头部跟随
+            chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
+            gimbal_cmd_send.yaw = vision_recv_data->gimbal_data.yaw;
+            gimbal_cmd_send.pitch = vision_recv_data->gimbal_data.pitch;
+            gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, PITCH_MAX_ANGLE, PITCH_MIN_ANGLE);
+            if (VL_data[TEMP].mouse.mouse_left && vision_recv_data->fire_control_data.fire_flag)
+            //鼠标左键短按单发，长按连发，前提是视觉模块的fire_flag为真
             {
-                case 0:
-                    shoot_cmd_send.load_mode = LOAD_1_BULLET;
-                    break;
-                case 1:
-                    shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
-                    shoot_cmd_send.shoot_rate = 15.0f; // 单位Hz
-                    break;
-                default:
-                    break;
-            }
-        } else shoot_cmd_send.load_mode = LOAD_STOP; //停止发射
-    }
-
-    //不按右键云台自由移动
-    else {
-        gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
-        gimbal_cmd_send.yaw -= (float) VL_data[TEMP].mouse.x / 660 * 2.4f; //3.5
-        gimbal_cmd_send.pitch -= (float) VL_data[TEMP].mouse.y / 660 * 1.3f; //-2.5
-        gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, PITCH_MAX_ANGLE, PITCH_MIN_ANGLE);
+                switch (VL_data[TEMP].key_count[KEY_PRESS][Key_R] % 2) // R键切换单发连发模式
+                {
+                    case 0:
+                        shoot_cmd_send.load_mode = LOAD_1_BULLET;
+                        break;
+                    case 1:
+                        shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
+                        shoot_cmd_send.shoot_rate = 15.0f; // 单位Hz
+                        break;
+                    default:
+                        break;
+                }
+            } else shoot_cmd_send.load_mode = LOAD_STOP; //停止发射
+        } else {
+            gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
+            gimbal_cmd_send.yaw -= (float) VL_data[TEMP].mouse.x / 660 * 2.4f; //3.5
+            gimbal_cmd_send.pitch -= (float) VL_data[TEMP].mouse.y / 660 * 1.3f; //-2.5
+            gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, PITCH_MAX_ANGLE, PITCH_MIN_ANGLE);
+        }
     }
 
     switch (VL_data[TEMP].key_count[KEY_PRESS][Key_F] % 2) // F键开关摩擦轮，不受自瞄模式影响
@@ -447,7 +499,7 @@ static void RemoteControl_Cmd(void) {
     // 左杆在中，右杆在中，云台锁紧模式
     else if (switch_is_mid(RC_data[TEMP].rc.switch_left) && switch_is_mid(RC_data[TEMP].rc.switch_right)) {
         chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
-        gimbal_cmd_send.gimbal_mode = GIMBAL_DOWN;
+        gimbal_cmd_send.gimbal_mode = GIMBAL_TIGHTEN;
     }
     // 左杆在上，右杆在中，自瞄模式
     else if (switch_is_up(RC_data[TEMP].rc.switch_left) && switch_is_mid(RC_data[TEMP].rc.switch_right)) {
@@ -488,7 +540,7 @@ static void Keyboard_Cmd(void) {
         chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW; // 默认底盘跟随云台yaw
 
     if (RC_data[TEMP].key_count[KEY_PRESS][Key_C] % 2 == 1) // C键切换云台缩紧模式
-        gimbal_cmd_send.gimbal_mode = GIMBAL_DOWN;
+        gimbal_cmd_send.gimbal_mode = GIMBAL_TIGHTEN;
     else gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
 
     //WASD方向平移
@@ -543,37 +595,36 @@ static void Keyboard_Cmd(void) {
         }
     } else shoot_cmd_send.load_mode = LOAD_STOP; //停止发射
 
-    if (RC_data[TEMP].mouse.press_r && gimbal_cmd_send.gimbal_mode != GIMBAL_DOWN) //长按鼠标右键进入自瞄模式
-    {
-        gimbal_cmd_send.gimbal_mode = GIMBAL_VISION; //只做头部跟随
-        chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
-        gimbal_cmd_send.yaw = vision_recv_data->gimbal_data.yaw;
-        gimbal_cmd_send.pitch = vision_recv_data->gimbal_data.pitch;
-        gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, PITCH_MAX_ANGLE, PITCH_MIN_ANGLE);
-        if (RC_data[TEMP].mouse.press_l && vision_recv_data->fire_control_data.fire_flag)
-        //鼠标左键短按单发，长按连发，前提是视觉模块的fire_flag为真
+    if (gimbal_cmd_send.gimbal_mode != GIMBAL_TIGHTEN) {
+        if (RC_data[TEMP].mouse.press_r) //长按鼠标右键进入自瞄模式
         {
-            switch (RC_data[TEMP].key_count[KEY_PRESS][Key_R] % 2) // R键切换单发连发模式
+            gimbal_cmd_send.gimbal_mode = GIMBAL_VISION; //只做头部跟随
+            chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
+            gimbal_cmd_send.yaw = vision_recv_data->gimbal_data.yaw;
+            gimbal_cmd_send.pitch = vision_recv_data->gimbal_data.pitch;
+            gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, PITCH_MAX_ANGLE, PITCH_MIN_ANGLE);
+            if (RC_data[TEMP].mouse.press_l && vision_recv_data->fire_control_data.fire_flag)
+            //鼠标左键短按单发，长按连发，前提是视觉模块的fire_flag为真
             {
-                case 0:
-                    shoot_cmd_send.load_mode = LOAD_1_BULLET;
-                    break;
-                case 1:
-                    shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
-                    shoot_cmd_send.shoot_rate = 15.0f; // 单位Hz
-                    break;
-                default:
-                    break;
-            }
-        } else shoot_cmd_send.load_mode = LOAD_STOP; //停止发射
-    }
-
-    //不按右键云台自由移动
-    else {
-        gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
-        gimbal_cmd_send.yaw -= (float) RC_data[TEMP].mouse.x / 660 * 2.4f; //3.5
-        gimbal_cmd_send.pitch -= (float) RC_data[TEMP].mouse.y / 660 * 1.3f; //-2.5
-        gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, PITCH_MAX_ANGLE, PITCH_MIN_ANGLE);
+                switch (RC_data[TEMP].key_count[KEY_PRESS][Key_R] % 2) // R键切换单发连发模式
+                {
+                    case 0:
+                        shoot_cmd_send.load_mode = LOAD_1_BULLET;
+                        break;
+                    case 1:
+                        shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
+                        shoot_cmd_send.shoot_rate = 15.0f; // 单位Hz
+                        break;
+                    default:
+                        break;
+                }
+            } else shoot_cmd_send.load_mode = LOAD_STOP; //停止发射
+        } else {
+            gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
+            gimbal_cmd_send.yaw -= (float) RC_data[TEMP].mouse.x / 660 * 2.4f; //3.5
+            gimbal_cmd_send.pitch -= (float) RC_data[TEMP].mouse.y / 660 * 1.3f; //-2.5
+            gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, PITCH_MAX_ANGLE, PITCH_MIN_ANGLE);
+        }
     }
 
     switch (RC_data[TEMP].key_count[KEY_PRESS][Key_F] % 2) // F键开关摩擦轮，不受自瞄模式影响

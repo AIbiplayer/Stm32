@@ -29,7 +29,6 @@ void VisionSetAimbotFlag(bool aimbot_flag) {
     send_data.gimbal_data.enable_aimbot = aimbot_flag;
 }
 
-
 void VisionSetAltitude(float yaw, float pitch) {
     send_data.gimbal_data.enable_aimbot = true;
     send_data.gimbal_data.yaw = yaw * DEGREE_2_RAD;

@@ -21,6 +21,7 @@
 
 static uint8_t Idx = 0; ///< 电机索引
 static uint8_t Setting_Buffer[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00}; ///< 使能、失能等使用
+static const float DM_IMU_FILTER_COEF = 0.2f;
 
 // 根据达妙手册填写
 static CANInstance sender_assignment = {
@@ -137,17 +138,22 @@ void Decode_dm_imu(CANInstance *Instance) {
     const uint8_t *Rx_Buff = Instance->rx_buff;
     DM_IMU_Instance_s *DM_IMU_Instance = Instance->id;
     DM_IMU_Measure_s *Measure = &DM_IMU_Instance->Measure;
+    float raw_value;
     switch (Rx_Buff[0]) {
         case 0x02: // Gyro
             for (uint8_t i = 1; i < 4; i++) {
-                Measure->Gyro[i - 1] = uint_to_float((uint16_t) (Rx_Buff[i * 2 + 1] << 8 | Rx_Buff[i * 2]),
-                                                     -2000.0f, 2000.0f, 16);
+                raw_value = uint_to_float((uint16_t) (Rx_Buff[i * 2 + 1] << 8 | Rx_Buff[i * 2]),
+                                          -2000.0f, 2000.0f, 16);
+                Measure->Gyro[i - 1] += DM_IMU_FILTER_COEF * (raw_value - Measure->Gyro[i - 1]);
             }
             break;
         case 0x03: // Roll, Pitch, Yaw
-            Measure->Roll = uint_to_float((uint16_t) (Rx_Buff[7] << 8 | Rx_Buff[6]), -180.0f, 180.0f, 16);
-            Measure->Pitch = uint_to_float((uint16_t) (Rx_Buff[3] << 8 | Rx_Buff[2]), -180.0f, 180.0f, 16);
-            Measure->Yaw = uint_to_float((uint16_t) (Rx_Buff[5] << 8 | Rx_Buff[4]), -180.0f, 180.0f, 16);
+            raw_value = uint_to_float((uint16_t) (Rx_Buff[7] << 8 | Rx_Buff[6]), -180.0f, 180.0f, 16);
+            Measure->Roll += DM_IMU_FILTER_COEF * (raw_value - Measure->Roll);
+            raw_value = uint_to_float((uint16_t) (Rx_Buff[3] << 8 | Rx_Buff[2]), -180.0f, 180.0f, 16);
+            Measure->Pitch += DM_IMU_FILTER_COEF * (raw_value - Measure->Pitch);
+            raw_value = uint_to_float((uint16_t) (Rx_Buff[5] << 8 | Rx_Buff[4]), -180.0f, 180.0f, 16);
+            Measure->Yaw += DM_IMU_FILTER_COEF * (raw_value - Measure->Yaw);
             break;
         default: break;
     }
