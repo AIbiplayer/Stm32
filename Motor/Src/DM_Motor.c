@@ -20,8 +20,9 @@
 #include "stdlib.h"
 
 static uint8_t Idx = 0; ///< 电机索引
-static uint8_t Setting_Buffer[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00}; ///< 使能、失能等使用
+static uint8_t Setting_Buffer[8] = {0xCC, 0x07, 0x01, 0xDD, 0x00, 0x00, 0x00, 0x00}; ///< 校准数据
 static const float DM_IMU_FILTER_COEF = 0.2f;
+extern DM_IMU_Instance_s DM_IMU; // 达妙IMU数据结构体实例
 
 // 根据达妙手册填写
 static CANInstance sender_assignment = {
@@ -45,8 +46,8 @@ DM_Motor_Instance *DM_Motor_Init(DM_Motor_Init_s *Motor_Init) {
     memset(Instance, 0, sizeof(DM_Motor_Instance));
     Instance->Control_Setting = Motor_Init->Control_Setting; //将电机部分内容转移
 
+    Instance->id = Motor_Init->Can_Init_Config.tx_id; //电机ID
     Motor_Init->Can_Init_Config.rx_id = 0x300 + Motor_Init->Can_Init_Config.tx_id; //根据协议设置CAN ID
-    Instance->id = Motor_Init->Can_Init_Config.rx_id; //电机ID
 
     Motor_Init->Can_Init_Config.can_module_callback = Decode_DM_Motor; //注册电机到CAN总线
     Motor_Init->Can_Init_Config.id = Instance;
@@ -105,13 +106,19 @@ void DM_Motor_Control(void) {
                       ? PID_Ref + *DM_Instance->Control_Setting.Feedforward_Ptr
                       : PID_Ref;
 
-        DM_Instance->Control_Setting.Power_Output = (int16_t) PID_Ref;
-        sender_assignment.tx_buff[(DM_Instance->id - 1) * 2 + 1] = (uint8_t) (
-            DM_Instance->Control_Setting.Power_Output >> 8);
-        sender_assignment.tx_buff[(DM_Instance->id - 1) * 2] = (uint8_t) DM_Instance->Control_Setting.Power_Output;
+        const uint8_t tx_index = (DM_Instance->id - 1u) * 2u;
+        if (DM_Instance->Control_Setting.Work_Type == MOTOR_STOP) {
+            DM_Instance->Power_Output_Filtered = 0.0f;
+            DM_Instance->Control_Setting.Power_Output = 0;
+            memset(sender_assignment.tx_buff + tx_index, 0, 2u);
+            continue;
+        }
 
-        if (DM_Instance->Control_Setting.Work_Type == MOTOR_STOP)
-            memset(sender_assignment.tx_buff + DM_Instance->id * 2, 0, 16u);
+        DM_Instance->Power_Output_Filtered +=
+            DM_POWER_OUTPUT_FILTER_COEF * (PID_Ref - DM_Instance->Power_Output_Filtered);
+        DM_Instance->Control_Setting.Power_Output = (int16_t) DM_Instance->Power_Output_Filtered;
+        sender_assignment.tx_buff[tx_index + 1u] = (uint8_t) (DM_Instance->Control_Setting.Power_Output >> 8);
+        sender_assignment.tx_buff[tx_index] = (uint8_t) DM_Instance->Control_Setting.Power_Output;
     }
     CANTransmit(&sender_assignment, 1);
 }
@@ -134,11 +141,18 @@ void Decode_DM_Motor(CANInstance *Instance) {
     Measure->total_angle = ((float) (Measure->ecd - PITCH_HORIZON_ECD) * ECD_ANGLE_COEF_DJI);
 }
 
+void dm_imu_reset(void) {
+    memcpy(DM_IMU.IMU_Can_Instance->tx_buff, Setting_Buffer, sizeof(Setting_Buffer));
+    CANTransmit(DM_IMU.IMU_Can_Instance, 1);
+}
+
 void Decode_dm_imu(CANInstance *Instance) {
     const uint8_t *Rx_Buff = Instance->rx_buff;
     DM_IMU_Instance_s *DM_IMU_Instance = Instance->id;
     DM_IMU_Measure_s *Measure = &DM_IMU_Instance->Measure;
     float raw_value;
+    float yaw_unwrapped;
+    float yaw_delta;
     switch (Rx_Buff[0]) {
         case 0x02: // Gyro
             for (uint8_t i = 1; i < 4; i++) {
@@ -153,7 +167,24 @@ void Decode_dm_imu(CANInstance *Instance) {
             raw_value = uint_to_float((uint16_t) (Rx_Buff[3] << 8 | Rx_Buff[2]), -180.0f, 180.0f, 16);
             Measure->Pitch += DM_IMU_FILTER_COEF * (raw_value - Measure->Pitch);
             raw_value = uint_to_float((uint16_t) (Rx_Buff[5] << 8 | Rx_Buff[4]), -180.0f, 180.0f, 16);
-            Measure->Yaw += DM_IMU_FILTER_COEF * (raw_value - Measure->Yaw);
+            if (!DM_IMU_Instance->YawInitFlag) {
+                DM_IMU_Instance->YawRawLast = raw_value;
+                DM_IMU_Instance->YawRoundCount = 0;
+                DM_IMU_Instance->YawInitFlag = 1u;
+                Measure->Yaw = raw_value;
+                Measure->YawTotalAngle = raw_value;
+            } else {
+                yaw_delta = raw_value - DM_IMU_Instance->YawRawLast;
+                if (yaw_delta > 180.0f) {
+                    DM_IMU_Instance->YawRoundCount--;
+                } else if (yaw_delta < -180.0f) {
+                    DM_IMU_Instance->YawRoundCount++;
+                }
+                DM_IMU_Instance->YawRawLast = raw_value;
+                Measure->Yaw += DM_IMU_FILTER_COEF * (raw_value - Measure->Yaw);
+                yaw_unwrapped = 360.0f * (float) DM_IMU_Instance->YawRoundCount + raw_value;
+                Measure->YawTotalAngle += DM_IMU_FILTER_COEF * (yaw_unwrapped - Measure->YawTotalAngle);
+            }
             break;
         default: break;
     }

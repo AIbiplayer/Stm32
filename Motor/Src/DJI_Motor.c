@@ -161,14 +161,6 @@ static void Decode_DJI_Motor(CANInstance *Instance) {
 
     if (Instance->daemon_instance != NULL)
         DaemonReload(Instance->daemon_instance); // 每次收到数据都重载daemon，保证模块在线
-
-
-    // if (DJI_Instance == Gimbal_Pitch) //pitch重力补偿
-    // {
-    //     Measure->Total_Angle = ((float) (Measure->Ecd - PITCH_HORIZON_ECD) * ECD_ANGLE_COEF_DJI);
-    //     Measure->gravity_compensate = (Gimbal_Pitch_gravity * cosf(Measure->Total_Angle)) /
-    //                                   Torque_Constant_6020;
-    // }
 }
 
 /**
@@ -221,25 +213,22 @@ void DJI_Motor_Control(void) {
                       : PID_Ref;
 
         DJI_Instance->Control_Setting.Power_Output = (int16_t) PID_Ref;
+    }
 
-        //功率限制部分
-        if (i != Idx - 1)
-            continue;
-        // power_limit();
+    // power_limit();
 
-        for (uint8_t k = 0; k < Idx; k++) {
-            DJI_Instance = Instance_Group[k];
-            const uint8_t Group = DJI_Instance->Send_Group;
-            const uint8_t InGroup_ID = DJI_Instance->Message_Num;
+    for (uint8_t k = 0; k < Idx; k++) {
+        DJI_Motor_Instance *DJI_Instance = Instance_Group[k];
+        const uint8_t Group = DJI_Instance->Send_Group;
+        const uint8_t InGroup_ID = DJI_Instance->Message_Num;
 
-            sender_assignment[Group].tx_buff[2 * InGroup_ID] = (uint8_t) (
-                DJI_Instance->Control_Setting.Power_Output >> 8); //高八位
-            sender_assignment[Group].tx_buff[2 * InGroup_ID + 1] = (uint8_t) DJI_Instance->Control_Setting.Power_Output;
-            //低八位
+        sender_assignment[Group].tx_buff[2 * InGroup_ID] = (uint8_t) (
+            DJI_Instance->Control_Setting.Power_Output >> 8); //高八位
+        sender_assignment[Group].tx_buff[2 * InGroup_ID + 1] = (uint8_t) DJI_Instance->Control_Setting.Power_Output;
+        //低八位
 
-            if (DJI_Instance->Control_Setting.Work_Type == MOTOR_STOP)
-                memset(sender_assignment[Group].tx_buff + 2 * InGroup_ID, 0, 16u);
-        }
+        if (DJI_Instance->Control_Setting.Work_Type == MOTOR_STOP)
+            memset(sender_assignment[Group].tx_buff + 2 * InGroup_ID, 0, 8u);
     }
 
     for (uint8_t i = 0; i < 6; i++) {

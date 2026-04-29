@@ -25,20 +25,20 @@
 #endif
 
 #pragma pack(1)
-typedef struct //@todo 后续补充底盘反馈数据
-{
+typedef struct {
     Chassis_Ctrl_Cmd_s Chassis_Cmd; ///< 底盘控制命令
-    gimbal_mode_e gimbal_mode: 2; ///< 云台模式,供底盘判断是否需要进行跟随等控制
+    uint8_t gimbal_mode: 2; ///< 云台模式,供底盘判断是否需要进行跟随等控制
     uint8_t UI_reset: 1; ///< UI重置标志,供底盘判断是否需要进行UI重置等控制
-    friction_mode_e friction_mode: 1; ///< 摩擦轮模式,供底盘判断是否需要进行跟随等控制
-    loader_mode_e loader_mode: 2; ///< 拨盘模式,供底盘判断是否需要进行跟随等控制
-    uint16_t speed_target; ///< 发射速度目标,供底盘判断是否需要进行跟随等控制
+    uint8_t friction_mode: 1; ///< 摩擦轮模式,供底盘判断是否需要进行跟随等控制
+    uint8_t loader_mode: 2; ///< 拨盘模式,供底盘判断是否需要进行跟随等控制
+    uint8_t distance_status: 1; ///< 距离状态,供底盘判断是否允许追击
+    uint8_t isfind_enemy: 1; ///< 视觉是否找到目标
+    uint8_t superpower_flag: 1; ///< 是否开启超级电容
+    uint8_t reset_flag: 1; ///< 是否复位，1为复位，0为不复位
+    uint8_t shoot_speed: 5; ///< 发射速度,供底盘判断是否需要进行跟随等控制,单位为m/s
 } TMC_To_Chassis_s; ///< 从云台发送到底盘的控制数据结构体
 
 typedef struct {
-    // int8_t CH_Roll; ///< 底盘的横滚角
-    // int8_t CH_Pitch; ///< 底盘的俯仰角
-    // int8_t CH_Gyro[3]; ///< 底盘的三轴角速度
     Shoot_Upload_Data_s Shoot_Upload_Data; ///< 发射反馈数据
 } TMC_To_Gimbal_s; ///< 从底盘发送到云台的控制数据结构体
 #pragma pack()

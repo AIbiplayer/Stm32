@@ -125,7 +125,8 @@ referee_info_t *Referee_Init(UART_HandleTypeDef *referee_usart_handle) {
     conf.usart_handle = referee_usart_handle;
     conf.recv_buff_size = RE_RX_BUFFER_SIZE; // mx 255(u8)
     referee_usart_instance = USARTRegister(&conf);
-    return &referee_info;
+    Referee_data = &referee_info;
+    return Referee_data;
 }
 
 /**

@@ -20,22 +20,28 @@
 
 // 云台参数
 #define YAW_ALIGN_ANGLE (YAW_CHASSIS_ALIGN_ECD * ECD_ANGLE_COEF_DJI) // 对齐时的角度,0-360
-#define YAW_CHASSIS_ALIGN_ECD 1800// 云台和底盘对齐指向相同方向时的电机编码器值,若对云台有机械改动需要修改
-#define YAW_RESET_ANGLE 15.0f // 云台重置时的角度
+#define YAW_CHASSIS_ALIGN_ECD 3140// 云台和底盘对齐指向相同方向时的电机编码器值,若对云台有机械改动需要修改
+#define YAW_RESET_ANGLE YAW_ALIGN_ANGLE // 云台重置时的角度
 #define YAW_ECD_GREATER_THAN_4096 0 // ALIGN_ECD值是否大于4096,是为1,否为0;用于计算云台偏转角度
-#define PITCH_HORIZON_ECD 2304      // 云台处于水平位置时编码器值,若对云台有机械改动需要修改
-#define PITCH_RESET_ANGLE 25.0f // 云台重置时的角度
-#define PITCH_HOLD_RESET_ANGLE 0.0f // 云台重置时的俯仰角,用于发射时保持云台不动,如果云台重置时的俯仰角和PITCH_RESET_ANGLE不同则需要修改
-#define PITCH_HOLD_EXTEND_ANGLE 90.0f // 保持云台不动的俯仰角,如果云台上台阶时的俯仰角和PITCH_RESET_ANGLE不同则需要修改
-#define PITCH_MAX_ANGLE 25.0f           // 云台竖直方向最大角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
+#define PITCH_HORIZON_ECD 6614     // 云台处于水平位置时编码器值,若对云台有机械改动需要修改
+#define PITCH_RESET_ANGLE -27.0f // 云台重置时的角度
+#define PITCH_HOLD_RESET_ANGLE 164.0f // 云台重置时的俯仰角,用于发射时保持云台不动,如果云台重置时的俯仰角和PITCH_RESET_ANGLE不同则需要修改
+#define PITCH_HOLD_EXTEND_ANGLE 83.0f // 保持云台不动的俯仰角,如果云台上台阶时的俯仰角和PITCH_RESET_ANGLE不同则需要修改
+#define PITCH_MAX_ANGLE 15.0f           // 云台竖直方向最大角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
 #define PITCH_MIN_ANGLE -25.00f           // 云台竖直方向最小角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
+#define PITCH_UP_GRAVITY_COMP_CURRENT 150.0f // Pitch_Up重力补偿电流,单位同达妙输出;实测: 关闭PID或弱PID,在水平附近托住Pitch_Up所需输出,方向不对则取负
+#define PITCH_UP_GRAVITY_COMP_HORIZON_ANGLE 0.0f // Pitch_Up重力补偿水平角,单位deg;实测: DM_IMU.Pitch在机构重力力臂最大的位置
+#define PITCH_UP_FRICTION_COMP_POS_CURRENT 200.0f // Pitch_Up正向摩擦补偿电流;实测: 目标角>实际角时,刚好克服静摩擦开始运动的最小输出,方向不对则取负
+#define PITCH_UP_FRICTION_COMP_NEG_CURRENT 250.0f // Pitch_Up反向摩擦补偿电流;实测: 目标角<实际角时,刚好克服静摩擦开始运动的最小输出,通常和正向不同
+#define PITCH_UP_FRICTION_COMP_DEADBAND 1.5f // Pitch_Up摩擦补偿误差死区,单位deg;误差小于该值时不加摩擦补偿,避免静止保持被推走
+#define DM_POWER_OUTPUT_FILTER_COEF 0.85f // 达妙最终电流输出一阶低通系数;越小越平滑但响应越慢,1.0f为不过滤
 // 发射参数
 #define SHOOT_COMPENSATION_K 1.5f // 发射补偿系数,用于调节发射速度与距离的关系 todo 具体数值待调试
-#define ONE_BULLET_DELTA_ANGLE  36.00f   // 发射一发弹丸拨盘转动的距离,由机械设计图纸给出
+#define ONE_BULLET_DELTA_ANGLE  27.00f   // 发射一发弹丸拨盘转动的距离,由机械设计图纸给出
 #define REDUCTION_SHOOT 2.5f // 齿轮减速比
 #define  RADIUS_FRICTION 30.0f // 摩擦轮半径,单位mm
 #define REDUCTION_RATIO_LOADER 36.0f // 拨盘电机的减速比,2006减速比36：1
-#define NUM_PER_CIRCLE 9            // 拨盘一圈的装载量
+#define NUM_PER_CIRCLE 12            // 拨盘一圈的装载量
 // 机器人底盘修改的参数,单位为mm(毫米)
 #define WHEEL_BASE 311              // 纵向轴距(前进后退方向)
 #define TRACK_WIDTH 297             // 横向轮距(左右平移方向)
@@ -46,7 +52,7 @@
 #define REDUCTION_RATIO_WHEEL 19.0f // 3508电机减速比,因为编码器量测的是转子的速度而不是输出轴的速度故需进行转换，这也是M3519减速比
 #define REDUCTION_TRACK 2.9f     // 履带减速比
 #define MAX_ANGLE_TRACK 180.0f        // 履带最大转动角度
-#define MAX_FOLLOW_SPEED 700 // 底盘跟随云台时的最大线速度,单位rad/s,放大一百倍
+#define MAX_FOLLOW_SPEED 100 // 底盘跟随云台时的最大线速度,单位rad/s,放大一百倍
 
 #define GYRO2GIMBAL_DIR_YAW 1   // 陀螺仪数据相较于云台的yaw的方向,1为相同,-1为相反
 #define GYRO2GIMBAL_DIR_PITCH -1 // 陀螺仪数据相较于云台的pitch的方向,1为相同,-1为相反
@@ -144,7 +150,6 @@ typedef enum {
 typedef enum {
     CHASSIS_ZERO_FORCE = 0, // 电流零输入
     CHASSIS_ROTATE, // 小陀螺模式
-    CHASSIS_NO_FOLLOW, // 不跟随，允许全向平移
     CHASSIS_FOLLOW_GIMBAL_YAW, // 跟随模式，底盘叠加角度环控制
     CHASSIS_INDEPENDENCE,
 } chassis_mode_e;
@@ -198,8 +203,7 @@ typedef struct {
     int16_t vy; // 横移方向速度,单位为mm/s
     int16_t wz; // 旋转速度，放大一百倍,单位为rad/s
     int16_t offset_angle; // 底盘和归中位置的夹角
-    chassis_mode_e chassis_mode: 3; // 底盘模式
-    chassis_mode_e chassis_last_mode: 3; // 底盘上一次模式
+    uint8_t chassis_mode; // 底盘模式，0为电流零输入，1为小陀螺模式，2为跟随模式，3为底盘独立控制模式
 } Chassis_Ctrl_Cmd_s;
 
 // cmd发布的云台控制数据,由gimbal订阅
@@ -218,7 +222,6 @@ typedef struct {
     loader_mode_e load_mode;
     lid_mode_e lid_mode;
     friction_mode_e friction_mode;
-    Bullet_Speed_e bullet_speed; // 弹速枚举
     uint8_t rest_heat;
     float shoot_rate; // 连续发射的射频,unit per s,发/秒
     uint8_t ONE_SHOOT_FLAG;
@@ -244,15 +247,19 @@ typedef struct {
 typedef struct {
     INS_t gimbal_imu_data;
     uint16_t yaw_motor_single_round_angle;
+    float yaw_motor_total_angle;
     uint8_t yaw_motor_offline; // 新增：YAW电机离线/停止标志
 } Gimbal_Upload_Data_s;
 
 typedef struct {
     uint16_t heat; // 枪口热量
-    uint16_t shooter_heat_limit; // 枪口热量上限
+    uint16_t shooter_heat_limit; // 枪口热量上限，放大1024倍
     uint8_t shooter_barrel_cooling_value; // 枪管冷却值
-    uint8_t robot_level: 7; // 机器人等级
-    uint8_t reference_online_state: 1; // 参考数据在线状态
+    uint8_t robot_level; // 机器人等级
+    uint8_t reference_online_state; // 参考数据在线状态
+    uint8_t robot_color;
+    int16_t rec_vx; // 从裁判系统接收的底盘速度数据,单位mm/s
+    int16_t rec_vy; // 从裁判系统接收的底盘速度,单位mm/s
 } Shoot_Upload_Data_s;
 
 #pragma pack() // 开启字节对齐,结束前面的#pragma pack(1)

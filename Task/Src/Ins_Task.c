@@ -13,6 +13,7 @@
 #include "referee.h"
 #include "daemon.h"
 #include "can_comm.h"
+#include "master_process.h"
 
 extern INS_t *Gimbal_IMU_Data; ///< 云台IMU数据
 extern CANCommInstance *CANCOM; // 底盘或云台的CAN通信实例指针
@@ -37,7 +38,15 @@ void INSTask(void const *argument) {
         INS_Task();
         DaemonTask();
 #ifdef MCU_GIMBAL
-        VisionSetAltitude(Gimbal_IMU_Data->Yaw, DM_IMU.Measure.Roll); //@todo 根据C板放置位置，Pitch和Roll调换位置
+        VisionUpdateRealtimeData(
+            &DM_IMU.Measure,
+            Gimbal_Rec != NULL ? Gimbal_Rec->Shoot_Upload_Data.rec_vx : 0,
+            Gimbal_Rec != NULL ? Gimbal_Rec->Shoot_Upload_Data.rec_vy : 0,
+            INS_TASK_PERIOD * 0.001f);
+        VisionUpdateNRTData(
+            Gimbal_Rec != NULL ? Gimbal_Rec->Shoot_Upload_Data.heat : 0u,
+            Gimbal_Rec != NULL ? Gimbal_Rec->Shoot_Upload_Data.shooter_heat_limit : 0u,
+            Gimbal_Rec != NULL ? Gimbal_Rec->Shoot_Upload_Data.robot_color : 0u);
         VisionSend();
 
 #endif
@@ -55,10 +64,11 @@ void IMU_Init(void) {
 
     DM_IMU.Can_Init_Config.can_handle = &hcan2;
     DM_IMU.Can_Init_Config.rx_id = 0x014;
+    DM_IMU.Can_Init_Config.tx_id = 0x010;
     DM_IMU.Can_Init_Config.id = &DM_IMU;
     DM_IMU.Can_Init_Config.can_module_callback = Decode_dm_imu;
 
     DM_IMU.IMU_Can_Instance = CANRegister(&DM_IMU.Can_Init_Config);
-
+    dm_imu_reset();
     LED_Green_Up;
 }

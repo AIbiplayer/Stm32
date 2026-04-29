@@ -25,6 +25,8 @@ static void FireContorl(void);
 
 static void Shoot_Status_Serve(void);
 
+static uint16_t DecodeHeatLimit(uint16_t raw_heat_limit);
+
 CCMRAM static DJI_Motor_Instance *Friction_L, *Friction_R;
 CCMRAM DJI_Motor_Instance *Load_bullet;
 static Publisher_t *shoot_pub;
@@ -50,6 +52,9 @@ static float Current_Queue_Sum_Threshold = 160; //电流队列和的判定阈�
 CCMRAM static TMC_To_Gimbal_s *Shoot_Data; // 底盘与云台数�?结构体实�?
 
 extern CANCommInstance *CANCOM;
+extern volatile uint8_t shoot_speed;
+
+float Total_angle_target, angle_actual;
 
 /**
  * @brief 射击FreeRTOS任务
@@ -67,7 +72,8 @@ void ShootTask(void const *argument) {
         // Calorie_Monitor(); //�?量自检
 
         Shoot_Status_Serve();
-
+        Total_angle_target = Load_bullet->Control_Setting.Target;
+        angle_actual = Load_bullet->Control_Setting.Angle_PID.Actual;
         PubPushMessage(shoot_pub, &shoot_feedback_data);
         osDelay(1);
 #endif
@@ -117,7 +123,7 @@ static void Shoot_Init(void) {
               1000,
               14000);
     PID_Param(&Load.Control_Setting.Angle_PID,
-              10,
+              5,
               0,
               0,
               Integral_Limit | Derivative_On_Measurement,
@@ -143,7 +149,7 @@ static void Shoot_Init(void) {
     Friction.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Friction_L = DJI_Motor_Init(&Friction);
 
-    Friction.Can_Init_Config.tx_id = 3;
+    Friction.Can_Init_Config.tx_id = 1;
     Friction.Control_Setting.Reverse_Flag = MOTOR_REVERSE;
     Friction_R = DJI_Motor_Init(&Friction);
 
@@ -156,6 +162,8 @@ static void Shoot_Init(void) {
  * @brief 射击控制函数
  */
 static void Shoot_Status_Serve(void) {
+    float friction_target_speed = shoot_speed == 0u ? 15.0f : (float) shoot_speed;
+
     if (shoot_cmd_recv.shoot_mode == SHOOT_OFF) {
         DJI_MotorStop(Friction_L);
         DJI_MotorStop(Friction_R);
@@ -181,7 +189,7 @@ static void Shoot_Status_Serve(void) {
         now_heat = now_heat_calorie_monitor;
     } else {
         // 裁判系统�?�?
-        heat_limit_max = Shoot_Data->Shoot_Upload_Data.shooter_heat_limit;
+        heat_limit_max = DecodeHeatLimit(Shoot_Data->Shoot_Upload_Data.shooter_heat_limit);
         now_heat_cd = Shoot_Data->Shoot_Upload_Data.shooter_barrel_cooling_value;
         now_heat = Shoot_Data->Shoot_Upload_Data.heat;
     }
@@ -191,10 +199,12 @@ static void Shoot_Status_Serve(void) {
     // 摩擦�?控制,单位m/s
     switch (shoot_cmd_recv.friction_mode) {
         case FRICTION_ON:
-            DJI_MotorSetTarget(Friction_L, 23 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);
-            //视�?�模式为23m/s
-            DJI_MotorSetTarget(Friction_R, 23 * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K * 1000.0f);
-            //视�?�模式为23m/s
+            DJI_MotorSetTarget(Friction_L,
+                               friction_target_speed * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K *
+                               1000.0f);
+            DJI_MotorSetTarget(Friction_R,
+                               friction_target_speed * RADS_2_RPM / RADIUS_FRICTION * SHOOT_COMPENSATION_K *
+                               1000.0f);
             break;
         case FRICTION_OFF:
             DJI_MotorSetTarget(Friction_L, 0);
@@ -203,7 +213,7 @@ static void Shoot_Status_Serve(void) {
     }
 
     // 堵转检�?
-    abs(Load_bullet->Measure.Speed) < 150 && abs(Load_bullet->Measure.Current) > 7000
+    abs(Load_bullet->Measure.Speed) < 150 && abs(Load_bullet->Measure.Current) > 8000
         ? (Load_bullet->Measure.Block_CNT++)
         : (Load_bullet->Measure.Block_CNT = 0);
     Load_bullet->Measure.Block_CNT > 10
@@ -235,8 +245,7 @@ static void Shoot_Status_Serve(void) {
             Shoot_One_Bullet_Flag = Shoot_One_Bullet_Flag == 2 ? 2 : 1;
             if (Shoot_One_Bullet_Flag == 1) {
                 DJI_MotorSetTarget(Load_bullet,
-                                   Load_bullet->Measure.Total_Angle + ONE_BULLET_DELTA_ANGLE * REDUCTION_RATIO_LOADER *
-                                   REDUCTION_SHOOT);
+                                   Load_bullet->Measure.Total_Angle - ONE_BULLET_DELTA_ANGLE * REDUCTION_RATIO_LOADER);
                 Shoot_One_Bullet_Flag = 2;
             }
             break;
@@ -244,7 +253,7 @@ static void Shoot_Status_Serve(void) {
         case LOAD_BURSTFIRE:
             DJI_MotorChangeLoop(Load_bullet, SPEED_CONTROL);
             DJI_MotorSetTarget(Load_bullet,
-                               shoot_cmd_recv.shoot_rate * 2 * PI * REDUCTION_RATIO_LOADER * REDUCTION_SHOOT *
+                               -shoot_cmd_recv.shoot_rate * 2 * PI * REDUCTION_RATIO_LOADER *
                                RADS_2_RPM / NUM_PER_CIRCLE);
             break;
         // 反转控制,单位rpm
@@ -323,6 +332,10 @@ static void Calorie_Monitor(void) //�?量监测使�?(�?完成)
             break;
     }
     now_heat_calorie_monitor = now_heat;
+}
+
+static uint16_t DecodeHeatLimit(uint16_t raw_heat_limit) {
+    return raw_heat_limit >= 1024u ? (uint16_t) (raw_heat_limit / 1024u) : raw_heat_limit;
 }
 
 static void FireContorl(void) //发射状态机,防�?�热量超�?

@@ -30,6 +30,7 @@ typedef struct {
     float Roll; ///< 滚转角，单位°
     float Pitch; ///< 俯仰角，单位°
     float Yaw; ///< 偏航角，单位°
+    float YawTotalAngle; ///< 累计偏航角，单位°
 } DM_IMU_Measure_s; ///< 达妙IMU
 
 typedef struct {
@@ -46,12 +47,16 @@ typedef struct {
     Motor_Control_Setting_s Control_Setting;
     CANInstance *Motor_Can_Instance;
     uint8_t id; ///< 电机ID
+    float Power_Output_Filtered; ///< 最终电流输出滤波值
 } DM_Motor_Instance; ///< 达妙电机实例
 
 typedef struct {
     DM_IMU_Measure_s Measure;
     CAN_Init_Config_s Can_Init_Config;
     CANInstance *IMU_Can_Instance;
+    float YawRawLast;
+    int32_t YawRoundCount;
+    uint8_t YawInitFlag;
 } DM_IMU_Instance_s; // 达妙IMU实例
 
 DM_Motor_Instance *DM_Motor_Init(DM_Motor_Init_s *Motor_Init);
@@ -73,5 +78,7 @@ void DM_MotorSet(DM_Motor_Instance *motor, float Target_);
 void DM_MotorSaveZero(DM_Motor_Instance *motor);
 
 void DM_MotorClearError(DM_Motor_Instance *motor);
+
+void dm_imu_reset(void);
 
 #endif //DM_MOTOR_H

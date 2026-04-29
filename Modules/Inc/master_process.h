@@ -2,6 +2,7 @@
 #define MASTER_PROCESS_H
 
 #include "bsp_usart.h"
+#include "DM_Motor.h"
 #include "seasky_protocol.h"
 
 #define VISION_RECV_SIZE 18u // 当前为固定值,36字节
@@ -31,5 +32,30 @@ void VisionSend(void);
  * @brief 设置发送数据的姿态部分
  */
 void VisionSetAltitude(float yaw, float pitch);
+
+/**
+ * @brief 设置视觉控制状态
+ * @param auto_find 右键进入自瞄时为1,松开为0
+ * @param mode 0-普通自瞄,1-小能量机关,2-大能量机关
+ */
+void VisionSetControlState(uint8_t auto_find, uint8_t mode);
+
+/**
+ * @brief 根据达妙IMU更新实时发送数据
+ * @param imu 达妙IMU数据
+ * @param chassis_speed_x_mmps 底盘x向速度,单位mm/s
+ * @param chassis_speed_y_mmps 底盘y向速度,单位mm/s
+ * @param dt 更新周期,单位s
+ */
+void VisionUpdateRealtimeData(const DM_IMU_Measure_s *imu, int16_t chassis_speed_x_mmps, int16_t chassis_speed_y_mmps,
+                              float dt);
+
+/**
+ * @brief 根据发射反馈更新非实时发送数据
+ * @param heat 当前热量
+ * @param shooter_heat_limit 当前热量上限
+ * @param robot_color 当前机器人颜色,0红1蓝
+ */
+void VisionUpdateNRTData(uint16_t heat, uint16_t shooter_heat_limit, uint8_t robot_color);
 
 #endif // !MASTER_PROCESS_H

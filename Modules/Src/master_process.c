@@ -11,33 +11,86 @@
 #include "master_process.h"
 #include "robot_def.h"
 #include "bsp_usb.h"
+#include <math.h>
+#include <string.h>
 
 static Vision_Recv_s recv_data; // 接收到的数据
 static Vision_Send_s send_data; // 待发送的数据
-static uint8_t send_buff[VISION_SEND_SIZE]; // 发送缓冲区
 extern USB_Control_t g_usb_dev; // 全局USB设备实例
 
-void VisionSetEnemyColorFlag(Enemy_Color_e enemy_color) {
-    send_data.gimbal_data.enemy_color = enemy_color;
+static volatile uint8_t vision_auto_find = 0;
+static volatile uint8_t vision_mode = 0;
+
+static float vision_accel_x_lpf = 0.0f;
+static float vision_accel_y_lpf = 0.0f;
+
+#define VISION_ACCEL_FILTER_TAU 0.03f
+#define VISION_ACCEL_DEADBAND   0.05f
+
+static float ClampFloat(float value, float min_value, float max_value) {
+    if (value < min_value) {
+        return min_value;
+    }
+    if (value > max_value) {
+        return max_value;
+    }
+    return value;
 }
 
-void VisionSetWorkModeFlag(Aimbot_Mode_e aimbot_mode) {
-    send_data.gimbal_data.aimbot_mode = aimbot_mode;
-}
-
-void VisionSetAimbotFlag(bool aimbot_flag) {
-    send_data.gimbal_data.enable_aimbot = aimbot_flag;
+static float DecodeHeatLimit(uint16_t shooter_heat_limit) {
+    return shooter_heat_limit >= 1024u ? (float) shooter_heat_limit / 1024.0f : (float) shooter_heat_limit;
 }
 
 void VisionSetAltitude(float yaw, float pitch) {
-    send_data.gimbal_data.enable_aimbot = true;
     send_data.gimbal_data.yaw = yaw * DEGREE_2_RAD;
     send_data.gimbal_data.pitch = pitch * DEGREE_2_RAD;
 }
 
-void VisionSetFireFlag(Aimbot_Mode_e aimbot_mode) {
-    send_data.gimbal_data.aimbot_mode = aimbot_mode;
+void VisionSetControlState(uint8_t auto_find, uint8_t mode) {
+    vision_auto_find = auto_find ? 1u : 0u;
+    vision_mode = mode <= 2u ? mode : 0u;
 }
+
+void VisionUpdateRealtimeData(const DM_IMU_Measure_s *imu, int16_t chassis_speed_x_mmps, int16_t chassis_speed_y_mmps,
+                              float dt) {
+    if (imu == NULL) {
+        return;
+    }
+
+    if (dt <= 0.0f || dt > 0.02f) {
+        dt = 0.001f;
+    }
+
+    send_data.gimbal_data.yaw = imu->Yaw * DEGREE_2_RAD;
+    send_data.gimbal_data.pitch = imu->Pitch * DEGREE_2_RAD;
+
+    send_data.gimbal_data.speedx = (float) chassis_speed_x_mmps * 0.001f;
+    send_data.gimbal_data.speedy = (float) chassis_speed_y_mmps * 0.001f;
+    vision_accel_x_lpf = 0.0f;
+    vision_accel_y_lpf = 0.0f;
+    send_data.gimbal_data.accelx = 0.0f;
+    send_data.gimbal_data.accely = 0.0f;
+}
+
+void VisionUpdateNRTData(uint16_t heat, uint16_t shooter_heat_limit, uint8_t robot_color) {
+    float heat_ratio = 0.0f;
+    float actual_heat_limit = DecodeHeatLimit(shooter_heat_limit);
+
+    send_data.nrt_data.my_color = robot_color ? 1u : 0u;
+    if (actual_heat_limit > 0.0f) {
+        heat_ratio = (float) heat / actual_heat_limit;
+    }
+
+    send_data.nrt_data.heat = (uint8_t) ClampFloat(heat_ratio * 10.0f, 0.0f, 15.0f);
+    send_data.nrt_data.auto_find = vision_auto_find;
+    send_data.nrt_data.mode = vision_mode;
+}
+
+#ifdef VISION_USE_UART
+
+#include "bsp_usart.h"
+
+static USARTInstance *vision_usart_instance;
 
 /**
  * @brief 离线回调函数,将在daemon.c中被daemon task调用
@@ -47,16 +100,9 @@ void VisionSetFireFlag(Aimbot_Mode_e aimbot_mode) {
  * @param id vision_usart_instance的地址,此处没用.
  */
 static void VisionOfflineCallback(void *id) {
-#ifdef VISION_USE_UART
+    (void) id;
     USARTServiceInit(vision_usart_instance);
-#endif // !VISION_USE_UART
 }
-
-#ifdef VISION_USE_UART
-
-#include "bsp_usart.h"
-
-static USARTInstance *vision_usart_instance;
 
 /**
  * @brief 接收解包回调函数,将在bsp_usart.c中被usart rx callback调用
@@ -121,6 +167,7 @@ void VisionSend()
 static uint8_t *vis_recv_buff;
 
 static void DecodeVision(uint16_t recv_len) {
+    (void) recv_len;
     get_protocol_info(vis_recv_buff, &recv_data);
 }
 
@@ -132,13 +179,26 @@ Vision_Recv_s *VisionInit(void) {
 }
 
 void VisionSend(void) {
-    static uint16_t tx_len;
-    send_data.cmd_data_type = TX_GIMBAL_POSITION;
+    static uint8_t usb_send_buff[2][VISION_SEND_SIZE];
+    static uint8_t usb_send_index = 0u;
+    uint16_t gimbal_tx_len = 0u;
+    uint16_t nrt_tx_len = 0u;
+    uint8_t next_index = usb_send_index ^ 1u;
+    uint8_t *tx_buf = usb_send_buff[next_index];
 
-    // 将数据转化为seasky协议的数据包
-    get_protocol_send_data(&send_data, send_buff, &tx_len);
-    bsp_usb_transmit(send_buff, tx_len);
-    memset(send_buff, 0, sizeof(send_buff));
+    send_data.cmd_data_type = TX_GIMBAL_REALTIME;
+    get_protocol_send_data(&send_data, tx_buf, &gimbal_tx_len);
+
+    send_data.cmd_data_type = TX_GIMBAL_N_REALTIME;
+    get_protocol_send_data(&send_data, tx_buf + gimbal_tx_len, &nrt_tx_len);
+
+    if ((uint16_t) (gimbal_tx_len + nrt_tx_len) > VISION_SEND_SIZE) {
+        return;
+    }
+
+    if (bsp_usb_transmit(tx_buf, (uint16_t) (gimbal_tx_len + nrt_tx_len)) == USBD_OK) {
+        usb_send_index = next_index;
+    }
 }
 
 #endif // VISION_USE_VCP

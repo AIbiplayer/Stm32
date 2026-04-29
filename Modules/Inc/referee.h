@@ -46,6 +46,8 @@ typedef struct {
     uint8_t init_flag;
 } referee_info_t;
 
+extern referee_info_t *Referee_data;
+
 // 模式是否切换标志位，0为未切换，1为切换，static定义默认为0
 typedef struct {
     uint32_t chassis_flag: 1;

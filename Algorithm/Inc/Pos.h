@@ -49,9 +49,9 @@ enum Gimbal_axis_index {
  * 轨迹时间单位均为秒，调用周期默认为 1ms。
  * Yaw/Pitch_Up 先走到缩紧姿态，再允许 Pitch_Down 下压到缩紧角。
  */
-#define YAW_TIGHTEN_DURATION 0.2f
-#define PITCH_UP_TIGHTEN_DURATION 0.2f
-#define PITCH_DOWN_TIGHTEN_DURATION 0.3f
-#define PITCH_DOWN_RELEASE_DURATION 0.3f
+#define YAW_TIGHTEN_DURATION 0.6f
+#define PITCH_UP_TIGHTEN_DURATION 0.6f
+#define PITCH_DOWN_TIGHTEN_DURATION 1.0f
+#define PITCH_DOWN_RELEASE_DURATION 1.0f
 
 #endif //POS_H

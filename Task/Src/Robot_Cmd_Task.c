@@ -21,23 +21,27 @@
 #include "super_cap.h"
 #include "Video_link.h"
 #include "TMC.h"
+#include "master_process.h"
 #include "UI.h"
 #include "ui_queue.h"
 
 CCMRAM RC_ctrl_t *RC_data = NULL; // 遥控器数据,初始化时返回
 CCMRAM VL_ctrl_t *VL_data = NULL; // 图传遥控器数据,初始化时返回
 CCMRAM Referee_Interactive_info_t *ui_data; // UI绘制需要的机器人状态,初始化时返回
+referee_info_t *Referee_data = NULL; // 裁判系统数据
+SuperCapInstance *cap = NULL; // 超级电容实例
 CCMRAM CANCommInstance *CANCOM; // 底盘或云台的CAN通信实例指针
 CCMRAM float Timeout = 0.0f; // 遥控器信号丢失计时
 CCMRAM uint8_t Timeout_flag = 0; // 遥控器信号丢失标志
 CCMRAM Vision_Recv_s *vision_recv_data; // 视觉接收数据
+CCMRAM volatile uint8_t shoot_speed = 15u; // 当前弹速档位,键鼠模式下会覆盖为10/15/20m/s
+static uint8_t software_reset_pending = 0u; // 置位后先发送一帧reset_flag，再执行软件复位
 
 extern TMC_To_Chassis_s *Chassis_Rec; // 底盘与云台数据结构体实例
 extern TMC_To_Gimbal_s *Gimbal_Rec; // 云台与底盘数据结构体实例
 
 /* cmd应用包含的模块实例指针和交互信息存储*/
 static Chassis_Ctrl_Cmd_s chassis_cmd_send; // 发送给底盘应用的信息,包括控制信息和UI绘制相关
-static Chassis_Upload_Data_s chassis_fetch_data; // 从底盘应用接收的反馈信息信息,底盘功率枪口热量与底盘运动状态等
 
 static Publisher_t *gimbal_cmd_pub; // 云台控制消息发布者
 static Subscriber_t *gimbal_feed_sub; // 云台反馈信息订阅者
@@ -49,8 +53,12 @@ static Subscriber_t *shoot_feed_sub; // 发射反馈信息订阅者
 static Shoot_Ctrl_Cmd_s shoot_cmd_send; // 传递给发射的控制信息
 static Shoot_Upload_Data_s shoot_fetch_data; // 从发射获取的反馈信息
 
+#ifdef MCU_GIMBAL
 static TMC_To_Chassis_s Chassis_Data; // 底盘与云台数据结构体实例
+#endif
+#ifdef MCU_CHASSIS
 static TMC_To_Gimbal_s Gimbal_Data; // 云台与底盘数据结构体实例
+#endif
 
 #ifdef MCU_CHASSIS // 如果是底盘板
 CCMRAM static CANComm_Init_Config_s TMC_CANComm_Config = {
@@ -62,7 +70,7 @@ CCMRAM static CANComm_Init_Config_s TMC_CANComm_Config = {
     .send_data_len = sizeof(TMC_To_Gimbal_s),
     .recv_data_len = sizeof(TMC_To_Chassis_s)
 };
-#elifdef MCU_GIMBAL
+#elif defined(MCU_GIMBAL)
 CCMRAM static CANComm_Init_Config_s TMC_CANComm_Config = {
     .can_config = {
         .can_handle = &hcan1,
@@ -92,6 +100,21 @@ static void Gimbal_Mode_Transition_Handle(void);
 
 static float GetNearestYawTightenTarget(float current_yaw);
 
+static uint8_t GetVisionModeByKeyCount(uint8_t key_count);
+
+static uint8_t GetShootSpeedByKeyCount(uint8_t key_count);
+
+static void ApplyManualFireControl(uint8_t fire_pressed, uint8_t burst_toggle_count);
+
+static friction_mode_e GetFrictionModeByKeyCount(uint8_t key_count);
+
+static void UpdateSoftwareResetRequest(uint8_t z_press_count, uint8_t *last_z_press_count);
+
+static void EnforceTightenShootSafety(void);
+
+static int16_t GetTightenMouseWz(int16_t mouse_x);
+
+static int16_t GetTightenRockerWz(int16_t rocker_x);
 
 /**
  * @brief 命令读取与发送FreeRTOS任务
@@ -118,15 +141,15 @@ void CmdTask(void *argument) {
             gimbal_cmd_send.yaw = gimbal_fetch_data.gimbal_imu_data.YawTotalAngle;
         }
 
-        if (gimbal_cmd_send.gimbal_mode == GIMBAL_TIGHTEN) {
-            shoot_cmd_send.shoot_mode = SHOOT_OFF; // 云台缩紧模式强制关闭射击
-            shoot_cmd_send.load_mode = LOAD_STOP;
-            shoot_cmd_send.friction_mode = FRICTION_OFF;
-        }
+        EnforceTightenShootSafety();
         Chassis_Data.Chassis_Cmd = chassis_cmd_send;
         Chassis_Data.loader_mode = shoot_cmd_send.load_mode;
         Chassis_Data.friction_mode = shoot_cmd_send.friction_mode;
         Chassis_Data.gimbal_mode = gimbal_cmd_send.gimbal_mode;
+        Chassis_Data.distance_status = vision_recv_data->enemy_data.distance_status;
+        Chassis_Data.isfind_enemy = vision_recv_data->enemy_data.isfind_enemy;
+        Chassis_Data.shoot_speed = shoot_speed;
+        Chassis_Data.reset_flag = software_reset_pending;
 
 #endif
 
@@ -164,8 +187,15 @@ void CmdTask(void *argument) {
 
         CANCommSend(CANCOM, (uint8_t *) &Gimbal_Data);
 
-#elifdef MCU_GIMBAL
-        CANCommSend(CANCOM, (uint8_t *) &Chassis_Data);
+#elif defined(MCU_GIMBAL)
+        // CANCommSend(CANCOM, (uint8_t *) &Chassis_Data);
+
+        if (software_reset_pending) {
+            Chassis_Data.reset_flag = 0u;
+            software_reset_pending = 0u;
+            __set_FAULTMASK(1); //关闭所有中断
+            NVIC_SystemReset(); //软件复位
+        }
 
         PubPushMessage(shoot_cmd_pub, (void *) &shoot_cmd_send);
         PubPushMessage(gimbal_cmd_pub, (void *) &gimbal_cmd_send);
@@ -198,7 +228,7 @@ static void Robot_Cmd_Init(void) {
 
     HAL_GPIO_WritePin(GPIOA,GPIO_PIN_12, GPIO_PIN_RESET); //USB DP拉低，重新枚举
 
-#elifdef MCU_CHASSIS
+#elif defined(MCU_CHASSIS)
     // 重新配置串口6波特率（裁判系统需要115200）
     extern DMA_HandleTypeDef hdma_usart6_rx;
     extern DMA_HandleTypeDef hdma_usart6_tx;
@@ -267,44 +297,109 @@ static float GetNearestYawTightenTarget(float current_yaw) {
 }
 
 static void Gimbal_Mode_Transition_Handle(void) {
-    static gimbal_mode_e last_gimbal_mode = GIMBAL_NONE;
-    static uint8_t first_enable_pending = 1;
+    static gimbal_mode_e last_gimbal_mode = GIMBAL_TIGHTEN;
     static uint16_t release_hold_ticks = 0;
     static float latched_tighten_yaw_target = YAW_TIGHTEN_ANGLE;
+    uint8_t non_tighten_request = gimbal_cmd_send.gimbal_mode != GIMBAL_NONE && gimbal_cmd_send.gimbal_mode != GIMBAL_TIGHTEN;
+    float current_yaw_reference = gimbal_fetch_data.yaw_motor_offline
+                                      ? gimbal_cmd_send.yaw
+                                      : gimbal_fetch_data.yaw_motor_total_angle;
 
     if (gimbal_cmd_send.gimbal_mode == GIMBAL_TIGHTEN && last_gimbal_mode != GIMBAL_TIGHTEN) {
-        latched_tighten_yaw_target = GetNearestYawTightenTarget(gimbal_cmd_send.yaw);
+        latched_tighten_yaw_target = GetNearestYawTightenTarget(current_yaw_reference);
+        release_hold_ticks = 0u;
     }
 
-    if (release_hold_ticks > 0 &&
-        gimbal_cmd_send.gimbal_mode != GIMBAL_NONE &&
-        gimbal_cmd_send.gimbal_mode != GIMBAL_TIGHTEN) {
+    if (gimbal_cmd_send.gimbal_mode == GIMBAL_TIGHTEN) {
+        gimbal_cmd_send.yaw = latched_tighten_yaw_target;
+        gimbal_cmd_send.pitch = PITCH_HEAD_ANGLE;
+        chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
+    } else if (non_tighten_request && last_gimbal_mode == GIMBAL_TIGHTEN && release_hold_ticks == 0u) {
+        release_hold_ticks = (uint16_t) (PITCH_DOWN_RELEASE_DURATION * 500.0f) + 20u;
+    }
+
+    if (release_hold_ticks > 0 && non_tighten_request) {
         gimbal_cmd_send.yaw = latched_tighten_yaw_target;
         gimbal_cmd_send.pitch = PITCH_HEAD_ANGLE;
         gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
         release_hold_ticks--;
     }
 
-    if (first_enable_pending && gimbal_cmd_send.gimbal_mode != GIMBAL_NONE) {
-        latched_tighten_yaw_target = YAW_TIGHTEN_ANGLE;
-        gimbal_cmd_send.yaw = latched_tighten_yaw_target;
-        gimbal_cmd_send.pitch = PITCH_HEAD_ANGLE;
-        gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
-        first_enable_pending = 0;
-        release_hold_ticks = (uint16_t) (PITCH_DOWN_RELEASE_DURATION * 500.0f) + 20u;
-    } else if (gimbal_cmd_send.gimbal_mode == GIMBAL_VISION &&
-               (last_gimbal_mode == GIMBAL_TIGHTEN || last_gimbal_mode == GIMBAL_NONE)) {
-        gimbal_cmd_send.yaw = latched_tighten_yaw_target;
-        gimbal_cmd_send.pitch = PITCH_HEAD_ANGLE;
-        gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
-        release_hold_ticks = (uint16_t) (PITCH_DOWN_RELEASE_DURATION * 500.0f) + 20u;
-    } else if (gimbal_cmd_send.gimbal_mode == GIMBAL_GYRO_MODE && last_gimbal_mode == GIMBAL_TIGHTEN) {
-        gimbal_cmd_send.yaw = latched_tighten_yaw_target;
-        gimbal_cmd_send.pitch = PITCH_HEAD_ANGLE;
-        release_hold_ticks = (uint16_t) (PITCH_DOWN_RELEASE_DURATION * 500.0f) + 20u;
+    last_gimbal_mode = gimbal_cmd_send.gimbal_mode;
+}
+
+static uint8_t GetVisionModeByKeyCount(uint8_t key_count) {
+    switch (key_count % 3u) {
+        case 1u:
+            return 1u;
+        case 2u:
+            return 2u;
+        default:
+            return 0u;
+    }
+}
+
+static uint8_t GetShootSpeedByKeyCount(uint8_t key_count) {
+    switch (key_count % 3u) {
+        case 1u:
+            return 15u;
+        case 2u:
+            return 20u;
+        default:
+            return 10u;
+    }
+}
+
+static void ApplyManualFireControl(uint8_t fire_pressed, uint8_t burst_toggle_count) {
+    if (gimbal_cmd_send.gimbal_mode == GIMBAL_TIGHTEN) {
+        shoot_cmd_send.load_mode = LOAD_STOP;
+        return;
     }
 
-    last_gimbal_mode = gimbal_cmd_send.gimbal_mode;
+    if (!fire_pressed) {
+        shoot_cmd_send.load_mode = LOAD_STOP;
+        return;
+    }
+
+    switch (burst_toggle_count % 2u) {
+        case 0u:
+            shoot_cmd_send.load_mode = LOAD_1_BULLET;
+            break;
+        default:
+            shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
+            break;
+    }
+}
+
+static friction_mode_e GetFrictionModeByKeyCount(uint8_t key_count) {
+    if (gimbal_cmd_send.gimbal_mode == GIMBAL_TIGHTEN) {
+        return FRICTION_OFF;
+    }
+
+    return key_count % 2u == 0u ? FRICTION_OFF : FRICTION_ON;
+}
+
+static int16_t GetTightenMouseWz(int16_t mouse_x) {
+    return (int16_t) (-(float) mouse_x / 660.0f * (float) MAX_FOLLOW_SPEED);
+}
+
+static int16_t GetTightenRockerWz(int16_t rocker_x) {
+    return (int16_t) (-(float) rocker_x / 660.0f * (float) MAX_FOLLOW_SPEED);
+}
+
+static void UpdateSoftwareResetRequest(uint8_t z_press_count, uint8_t *last_z_press_count) {
+    if (z_press_count != *last_z_press_count) {
+        software_reset_pending = 1u;
+        *last_z_press_count = z_press_count;
+    }
+}
+
+static void EnforceTightenShootSafety(void) {
+    if (gimbal_cmd_send.gimbal_mode == GIMBAL_TIGHTEN) {
+        shoot_cmd_send.shoot_mode = SHOOT_OFF;
+        shoot_cmd_send.load_mode = LOAD_STOP;
+        shoot_cmd_send.friction_mode = FRICTION_OFF;
+    }
 }
 
 /**
@@ -312,18 +407,40 @@ static void Gimbal_Mode_Transition_Handle(void) {
  * @todo 紧急停止，键盘控制，遥控器控制三种模式的切换还没完成
  */
 static void Robot_Cmd_Serve(void) {
-    // 左右两杆均拨下，紧急断电
-    chassis_cmd_send.chassis_last_mode = chassis_cmd_send.chassis_mode;
+    static uint8_t startup_tighten_latch = 1u;
+    uint8_t rc_emergency = RC_data != NULL && switch_is_down(RC_data[TEMP].rc.switch_left) &&
+                           switch_is_down(RC_data[TEMP].rc.switch_right);
+    uint8_t vl_emergency = VL_data != NULL && VL_data[TEMP].rc.mode_sw == 2;
+    uint8_t rc_release_startup = RC_data != NULL && !rc_emergency;
+    uint8_t vl_release_startup = VL_data != NULL && VL_data[TEMP].rc.mode_sw != 2;
 
-    if ((RC_data != NULL && switch_is_down(RC_data[TEMP].rc.switch_left) && switch_is_down(
-             RC_data[TEMP].rc.switch_right)) ||
-        (VL_data != NULL && VL_data[TEMP].rc.mode_sw == 2) || Timeout_flag) {
+    // 左右两杆均拨下，紧急断电
+    if (startup_tighten_latch && (rc_release_startup || vl_release_startup)) {
+        startup_tighten_latch = 0u;
+    }
+
+    if (!startup_tighten_latch && (rc_emergency || vl_emergency || Timeout_flag)) {
         Emergency_Stop();
         return;
     }
     // 射击指令
     shoot_cmd_send.shoot_mode = SHOOT_ON;
+    VisionSetControlState(0u, 0u);
+#ifdef MCU_GIMBAL
+    Chassis_Data.UI_reset = 0u;
+    Chassis_Data.superpower_flag = 0u;
+    Chassis_Data.shoot_speed = shoot_speed;
+#endif
     LED_Red_Down;
+
+    if (startup_tighten_latch) {
+        chassis_cmd_send.vx = 0;
+        chassis_cmd_send.vy = 0;
+        chassis_cmd_send.wz = 0;
+        chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
+        gimbal_cmd_send.gimbal_mode = GIMBAL_TIGHTEN;
+        return;
+    }
 
     // 键盘控制优先级最高，图传遥控器次之，遥控器优先级最低
     if ((switch_is_up(RC_data[TEMP].rc.switch_left) && switch_is_up(RC_data[TEMP].rc.switch_right)))
@@ -343,6 +460,7 @@ static void Emergency_Stop(void) {
     shoot_cmd_send.shoot_mode = SHOOT_OFF;
     shoot_cmd_send.friction_mode = FRICTION_OFF;
     shoot_cmd_send.load_mode = LOAD_STOP;
+    VisionSetControlState(0u, 0u);
     LED_Red_Up;
 }
 
@@ -351,61 +469,81 @@ static void Emergency_Stop(void) {
  * @note 这是基于图传的键鼠控制
  */
 static void VL_keyboard_cmd(void) {
-    static uint16_t max_speed = 1000; //默认最大速度1m/s
-    if (VL_data[TEMP].key_count[KEY_PRESS][Key_Ctrl] % 2 == 1) // 按下Ctrl键底盘独立控制
+    static uint8_t last_z_press_count = 0u;
+    const uint16_t max_speed = 3500;
+    uint8_t vision_mode = GetVisionModeByKeyCount(VL_data[TEMP].key_count[KEY_PRESS][Key_X]);
+    if (VL_data[TEMP].key_count[KEY_PRESS][Key_C] % 2 == 1) // C键切换云台缩紧模式
+        gimbal_cmd_send.gimbal_mode = GIMBAL_TIGHTEN;
+    else
+        gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
+
+    if (gimbal_cmd_send.gimbal_mode == GIMBAL_TIGHTEN) {
+        chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
+    } else if (VL_data[TEMP].key_count[KEY_PRESS][Key_Ctrl] % 2 == 1) // 按下Ctrl键底盘独立控制
         chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
     else if (VL_data[TEMP].key_count[KEY_PRESS][Key_Shift] % 2 == 1) // 按下Shift键底盘小陀螺
         chassis_cmd_send.chassis_mode = CHASSIS_ROTATE;
     else
         chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW; // 默认底盘跟随云台yaw
 
-    if (VL_data[TEMP].key_count[KEY_PRESS][Key_C] % 2 == 1) // C键切换云台缩紧模式
-        gimbal_cmd_send.gimbal_mode = GIMBAL_TIGHTEN;
-    else gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
-
     //WASD方向平移
-    if (VL_data[TEMP].key[KEY_PRESS].w)
-        chassis_cmd_send.vy = chassis_cmd_send.vy < max_speed ? chassis_cmd_send.vy += 10u : max_speed;
-    else if (VL_data[TEMP].key[KEY_PRESS].s)
-        chassis_cmd_send.vy = (chassis_cmd_send.vy > -max_speed) ? (chassis_cmd_send.vy -= 10u) : -max_speed;
-    else chassis_cmd_send.vy = 0;
-
-    if (chassis_cmd_send.chassis_mode == CHASSIS_INDEPENDENCE) {
-        if (VL_data[TEMP].key[KEY_PRESS].d)
-            chassis_cmd_send.wz = (chassis_cmd_send.wz < MAX_FOLLOW_SPEED)
-                                      ? (chassis_cmd_send.wz += 2)
-                                      : MAX_FOLLOW_SPEED;
-        else if (VL_data[TEMP].key[KEY_PRESS].a)
-            chassis_cmd_send.wz = (chassis_cmd_send.wz > -MAX_FOLLOW_SPEED)
-                                      ? (chassis_cmd_send.wz -= 2)
-                                      : -MAX_FOLLOW_SPEED;
-        else
-            chassis_cmd_send.wz = 0;
+    if (VL_data[TEMP].key[KEY_PRESS].w) {
+        if (chassis_cmd_send.vy < max_speed) {
+            chassis_cmd_send.vy += 20u;
+        } else {
+            chassis_cmd_send.vy = max_speed;
+        }
+    } else if (VL_data[TEMP].key[KEY_PRESS].s) {
+        if (chassis_cmd_send.vy > -max_speed) {
+            chassis_cmd_send.vy -= 20u;
+        } else {
+            chassis_cmd_send.vy = -max_speed;
+        }
     } else {
-        // 按D键vx减小(向右), 按A键vx增大(向左)
-        if (VL_data[TEMP].key[KEY_PRESS].d)
-            chassis_cmd_send.vx = (chassis_cmd_send.vx > -max_speed) ? (chassis_cmd_send.vx -= 10) : -max_speed;
-        else if (VL_data[TEMP].key[KEY_PRESS].a)
-            chassis_cmd_send.vx = (chassis_cmd_send.vx < max_speed) ? (chassis_cmd_send.vx += 10) : max_speed;
-        else
-            chassis_cmd_send.vx = 0;
+        chassis_cmd_send.vy = 0;
     }
 
-    if (VL_data[TEMP].mouse.mouse_left) //鼠标左键短按单发，长按连发
-    {
-        switch (VL_data[TEMP].key_count[KEY_PRESS][Key_R] % 2) // R键切换单发连发模式
-        {
-            case 0:
-                shoot_cmd_send.load_mode = LOAD_1_BULLET;
-                break;
-            case 1:
-                shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
-                shoot_cmd_send.shoot_rate = 15.0f; // 单位Hz
-                break;
-            default:
-                break;
+    if (chassis_cmd_send.chassis_mode == CHASSIS_INDEPENDENCE) {
+        if (VL_data[TEMP].key[KEY_PRESS].d) {
+            if (chassis_cmd_send.wz < MAX_FOLLOW_SPEED) {
+                chassis_cmd_send.wz += 4;
+            } else {
+                chassis_cmd_send.wz = MAX_FOLLOW_SPEED;
+            }
+        } else if (VL_data[TEMP].key[KEY_PRESS].a) {
+            if (chassis_cmd_send.wz > -MAX_FOLLOW_SPEED) {
+                chassis_cmd_send.wz -= 4;
+            } else {
+                chassis_cmd_send.wz = -MAX_FOLLOW_SPEED;
+            }
+        } else {
+            chassis_cmd_send.wz = 0;
         }
-    } else shoot_cmd_send.load_mode = LOAD_STOP; //停止发射
+    } else {
+        // 按D键vx减小(向右), 按A键vx增大(向左)
+        if (VL_data[TEMP].key[KEY_PRESS].d) {
+            if (chassis_cmd_send.vx > -max_speed) {
+                chassis_cmd_send.vx -= 20u;
+            } else {
+                chassis_cmd_send.vx = -max_speed;
+            }
+        } else if (VL_data[TEMP].key[KEY_PRESS].a) {
+            if (chassis_cmd_send.vx < max_speed) {
+                chassis_cmd_send.vx += 20u;
+            } else {
+                chassis_cmd_send.vx = max_speed;
+            }
+        } else {
+            chassis_cmd_send.vx = 0;
+        }
+    }
+
+    if (gimbal_cmd_send.gimbal_mode == GIMBAL_TIGHTEN) {
+        chassis_cmd_send.wz = GetTightenMouseWz(VL_data[TEMP].mouse.x);
+    }
+
+    VisionSetControlState(0u, vision_mode);
+    ApplyManualFireControl(VL_data[TEMP].mouse.mouse_left, VL_data[TEMP].key_count[KEY_PRESS][Key_R]);
 
     if (gimbal_cmd_send.gimbal_mode != GIMBAL_TIGHTEN) {
         if (VL_data[TEMP].mouse.mouse_right) //长按鼠标右键进入自瞄模式
@@ -415,21 +553,12 @@ static void VL_keyboard_cmd(void) {
             gimbal_cmd_send.yaw = vision_recv_data->gimbal_data.yaw;
             gimbal_cmd_send.pitch = vision_recv_data->gimbal_data.pitch;
             gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, PITCH_MAX_ANGLE, PITCH_MIN_ANGLE);
-            if (VL_data[TEMP].mouse.mouse_left && vision_recv_data->fire_control_data.fire_flag)
+            shoot_cmd_send.shoot_rate = (float) vision_recv_data->gimbal_data.loader_frequency;
+            VisionSetControlState(1u, vision_mode);
+            if (VL_data[TEMP].mouse.mouse_left && vision_recv_data->gimbal_data.fire_flag)
             //鼠标左键短按单发，长按连发，前提是视觉模块的fire_flag为真
             {
-                switch (VL_data[TEMP].key_count[KEY_PRESS][Key_R] % 2) // R键切换单发连发模式
-                {
-                    case 0:
-                        shoot_cmd_send.load_mode = LOAD_1_BULLET;
-                        break;
-                    case 1:
-                        shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
-                        shoot_cmd_send.shoot_rate = 15.0f; // 单位Hz
-                        break;
-                    default:
-                        break;
-                }
+                ApplyManualFireControl(VL_data[TEMP].mouse.mouse_left, VL_data[TEMP].key_count[KEY_PRESS][Key_R]);
             } else shoot_cmd_send.load_mode = LOAD_STOP; //停止发射
         } else {
             gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
@@ -439,40 +568,25 @@ static void VL_keyboard_cmd(void) {
         }
     }
 
-    switch (VL_data[TEMP].key_count[KEY_PRESS][Key_F] % 2) // F键开关摩擦轮，不受自瞄模式影响
-    {
-        case 0:
-            shoot_cmd_send.friction_mode = FRICTION_OFF;
-            break;
-        default:
-            shoot_cmd_send.friction_mode = FRICTION_ON;
-            break;
-    }
-    switch (VL_data[TEMP].key_count[KEY_PRESS][Key_V] % 4) //V键调整速度
-    {
-        case 0:
-            max_speed = 1000;
-            break;
-        case 1:
-            max_speed = 1500;
-            break;
-        case 2:
-            max_speed = 2000;
-            break;
-        default:
-            max_speed = 2500;
-    }
-    Chassis_Data.speed_target = max_speed;
-    Chassis_Data.UI_reset = VL_data[TEMP].key[KEY_PRESS].z ? true : false;
+    shoot_cmd_send.friction_mode = GetFrictionModeByKeyCount(VL_data[TEMP].key_count[KEY_PRESS][Key_F]);
+    shoot_speed = GetShootSpeedByKeyCount(VL_data[TEMP].key_count[KEY_PRESS][Key_V]);
+    Chassis_Data.superpower_flag = (uint8_t) (VL_data[TEMP].key_count[KEY_PRESS][Key_B] % 2u);
+    Chassis_Data.UI_reset = 0u;
+    UpdateSoftwareResetRequest(VL_data[TEMP].key_count[KEY_PRESS][Key_Z], &last_z_press_count);
 }
 
 /**
  * @brief 遥控器控制指令解析
  */
 static void RemoteControl_Cmd(void) {
-    abs(RC_data[TEMP].rc.dial) > 100 // 拨盘大于100 启动电机
-        ? (shoot_cmd_send.friction_mode = FRICTION_ON)
-        : (shoot_cmd_send.friction_mode = FRICTION_OFF);
+    VisionSetControlState(0u, 0u);
+    if (gimbal_cmd_send.gimbal_mode == GIMBAL_TIGHTEN) {
+        shoot_cmd_send.friction_mode = FRICTION_OFF;
+    } else {
+        abs(RC_data[TEMP].rc.dial) > 100 // 拨盘大于100 启动电机
+            ? (shoot_cmd_send.friction_mode = FRICTION_ON)
+            : (shoot_cmd_send.friction_mode = FRICTION_OFF);
+    }
     if (RC_data[TEMP].rc.dial > 500) {
         shoot_cmd_send.load_mode = LOAD_BURSTFIRE; //连发
         shoot_cmd_send.shoot_rate = 15.0f; //单位Hz
@@ -498,7 +612,7 @@ static void RemoteControl_Cmd(void) {
     }
     // 左杆在中，右杆在中，云台锁紧模式
     else if (switch_is_mid(RC_data[TEMP].rc.switch_left) && switch_is_mid(RC_data[TEMP].rc.switch_right)) {
-        chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
+        chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
         gimbal_cmd_send.gimbal_mode = GIMBAL_TIGHTEN;
     }
     // 左杆在上，右杆在中，自瞄模式
@@ -512,6 +626,8 @@ static void RemoteControl_Cmd(void) {
         gimbal_cmd_send.yaw -= 0.0008f * (float) RC_data[TEMP].rc.rocker_r_;
         gimbal_cmd_send.pitch -= 0.0006f * (float) RC_data[TEMP].rc.rocker_r1;
         gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, PITCH_MAX_ANGLE, PITCH_MIN_ANGLE);
+    } else if (gimbal_cmd_send.gimbal_mode == GIMBAL_TIGHTEN) {
+        chassis_cmd_send.wz = GetTightenRockerWz(RC_data[TEMP].rc.rocker_r_);
     }
     // 视觉模式
     else if (gimbal_cmd_send.gimbal_mode == GIMBAL_VISION) {
@@ -523,7 +639,7 @@ static void RemoteControl_Cmd(void) {
     // 平移速度设置
     chassis_cmd_send.vy = ((float) RC_data[TEMP].rc.rocker_l1) * 0.151f * 30.0f; // 最高3m/s
     chassis_cmd_send.chassis_mode == CHASSIS_INDEPENDENCE
-        ? (chassis_cmd_send.wz = (float) RC_data[TEMP].rc.rocker_l_ * 0.00151f * 1.0f) // 最高1转/s
+        ? (chassis_cmd_send.wz = RC_data[TEMP].rc.rocker_l_ * 0.00151f * 100.0f) // 最高1转/s
         : (chassis_cmd_send.vx = -(float) RC_data[TEMP].rc.rocker_l_ * 0.151f * 30.0f); // 最高3m/s
 }
 
@@ -531,69 +647,81 @@ static void RemoteControl_Cmd(void) {
  * @brief DR16键盘控制指令解析
  */
 static void Keyboard_Cmd(void) {
-    static uint16_t max_speed = 1000; //默认最大速度1m/s
-    if (RC_data[TEMP].key_count[KEY_PRESS][Key_Ctrl] % 2 == 1) // 按下Ctrl键底盘独立控制
+    static uint8_t last_z_press_count = 0u;
+    const uint16_t max_speed = 3500;
+    uint8_t vision_mode = GetVisionModeByKeyCount(RC_data[TEMP].key_count[KEY_PRESS][Key_X]);
+    if (RC_data[TEMP].key_count[KEY_PRESS][Key_C] % 2 == 1) // C键切换云台缩紧模式
+        gimbal_cmd_send.gimbal_mode = GIMBAL_TIGHTEN;
+    else
+        gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
+
+    if (gimbal_cmd_send.gimbal_mode == GIMBAL_TIGHTEN) {
+        chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
+    } else if (RC_data[TEMP].key_count[KEY_PRESS][Key_Ctrl] % 2 == 1) // 按下Ctrl键底盘独立控制
         chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
     else if (RC_data[TEMP].key_count[KEY_PRESS][Key_Shift] % 2 == 1) // 按下Shift键底盘小陀螺
         chassis_cmd_send.chassis_mode = CHASSIS_ROTATE;
     else
         chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW; // 默认底盘跟随云台yaw
 
-    if (RC_data[TEMP].key_count[KEY_PRESS][Key_C] % 2 == 1) // C键切换云台缩紧模式
-        gimbal_cmd_send.gimbal_mode = GIMBAL_TIGHTEN;
-    else gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
-
     //WASD方向平移
-    if (RC_data[TEMP].key[KEY_PRESS].w)
-        chassis_cmd_send.vy = (chassis_cmd_send.vy < max_speed)
-                                  ? (chassis_cmd_send.vy += 10)
-                                  : max_speed;
-    else if (RC_data[TEMP].key[KEY_PRESS].s)
-        chassis_cmd_send.vy = (chassis_cmd_send.vy > -max_speed)
-                                  ? (chassis_cmd_send.vy -= 10)
-                                  : -max_speed;
-    else chassis_cmd_send.vy = 0;
-
-    if (chassis_cmd_send.chassis_mode == CHASSIS_INDEPENDENCE) {
-        if (RC_data[TEMP].key[KEY_PRESS].d)
-            chassis_cmd_send.wz = (chassis_cmd_send.wz < MAX_FOLLOW_SPEED)
-                                      ? (chassis_cmd_send.wz += 2)
-                                      : MAX_FOLLOW_SPEED;
-        else if (RC_data[TEMP].key[KEY_PRESS].a)
-            chassis_cmd_send.wz = (chassis_cmd_send.wz > -MAX_FOLLOW_SPEED)
-                                      ? (chassis_cmd_send.wz -= 2)
-                                      : -MAX_FOLLOW_SPEED;
-        else
-            chassis_cmd_send.wz = 0;
+    if (RC_data[TEMP].key[KEY_PRESS].w) {
+        if (chassis_cmd_send.vy < max_speed) {
+            chassis_cmd_send.vy += 20u;
+        } else {
+            chassis_cmd_send.vy = max_speed;
+        }
+    } else if (RC_data[TEMP].key[KEY_PRESS].s) {
+        if (chassis_cmd_send.vy > -max_speed) {
+            chassis_cmd_send.vy -= 20u;
+        } else {
+            chassis_cmd_send.vy = -max_speed;
+        }
     } else {
-        // 按D键vx减小(向右), 按A键vx增大(向左)
-        if (RC_data[TEMP].key[KEY_PRESS].d)
-            chassis_cmd_send.vx = (chassis_cmd_send.vx > -max_speed)
-                                      ? (chassis_cmd_send.vx -= 10)
-                                      : -max_speed;
-        else if (RC_data[TEMP].key[KEY_PRESS].a)
-            chassis_cmd_send.vx = (chassis_cmd_send.vx < max_speed)
-                                      ? (chassis_cmd_send.vx += 10)
-                                      : max_speed;
-        else
-            chassis_cmd_send.vx = 0;
+        chassis_cmd_send.vy = 0;
     }
 
-    if (RC_data[TEMP].mouse.press_l) //鼠标左键短按单发，长按连发
-    {
-        switch (RC_data[TEMP].key_count[KEY_PRESS][Key_R] % 2) // R键切换单发连发模式
-        {
-            case 0:
-                shoot_cmd_send.load_mode = LOAD_1_BULLET;
-                break;
-            case 1:
-                shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
-                shoot_cmd_send.shoot_rate = 15.0f; // 单位Hz
-                break;
-            default:
-                break;
+    if (chassis_cmd_send.chassis_mode == CHASSIS_INDEPENDENCE) {
+        if (RC_data[TEMP].key[KEY_PRESS].d) {
+            if (chassis_cmd_send.wz < MAX_FOLLOW_SPEED) {
+                chassis_cmd_send.wz += 4;
+            } else {
+                chassis_cmd_send.wz = MAX_FOLLOW_SPEED;
+            }
+        } else if (RC_data[TEMP].key[KEY_PRESS].a) {
+            if (chassis_cmd_send.wz > -MAX_FOLLOW_SPEED) {
+                chassis_cmd_send.wz -= 4;
+            } else {
+                chassis_cmd_send.wz = -MAX_FOLLOW_SPEED;
+            }
+        } else {
+            chassis_cmd_send.wz = 0;
         }
-    } else shoot_cmd_send.load_mode = LOAD_STOP; //停止发射
+    } else {
+        // 按D键vx减小(向右), 按A键vx增大(向左)
+        if (RC_data[TEMP].key[KEY_PRESS].d) {
+            if (chassis_cmd_send.vx > -max_speed) {
+                chassis_cmd_send.vx -= 20u;
+            } else {
+                chassis_cmd_send.vx = -max_speed;
+            }
+        } else if (RC_data[TEMP].key[KEY_PRESS].a) {
+            if (chassis_cmd_send.vx < max_speed) {
+                chassis_cmd_send.vx += 20u;
+            } else {
+                chassis_cmd_send.vx = max_speed;
+            }
+        } else {
+            chassis_cmd_send.vx = 0;
+        }
+    }
+
+    if (gimbal_cmd_send.gimbal_mode == GIMBAL_TIGHTEN) {
+        chassis_cmd_send.wz = GetTightenMouseWz(RC_data[TEMP].mouse.x);
+    }
+
+    VisionSetControlState(0u, vision_mode);
+    ApplyManualFireControl(RC_data[TEMP].mouse.press_l, RC_data[TEMP].key_count[KEY_PRESS][Key_R]);
 
     if (gimbal_cmd_send.gimbal_mode != GIMBAL_TIGHTEN) {
         if (RC_data[TEMP].mouse.press_r) //长按鼠标右键进入自瞄模式
@@ -603,21 +731,12 @@ static void Keyboard_Cmd(void) {
             gimbal_cmd_send.yaw = vision_recv_data->gimbal_data.yaw;
             gimbal_cmd_send.pitch = vision_recv_data->gimbal_data.pitch;
             gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, PITCH_MAX_ANGLE, PITCH_MIN_ANGLE);
-            if (RC_data[TEMP].mouse.press_l && vision_recv_data->fire_control_data.fire_flag)
+            shoot_cmd_send.shoot_rate = (float) vision_recv_data->gimbal_data.loader_frequency;
+            VisionSetControlState(1u, vision_mode);
+            if (RC_data[TEMP].mouse.press_l && vision_recv_data->gimbal_data.fire_flag)
             //鼠标左键短按单发，长按连发，前提是视觉模块的fire_flag为真
             {
-                switch (RC_data[TEMP].key_count[KEY_PRESS][Key_R] % 2) // R键切换单发连发模式
-                {
-                    case 0:
-                        shoot_cmd_send.load_mode = LOAD_1_BULLET;
-                        break;
-                    case 1:
-                        shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
-                        shoot_cmd_send.shoot_rate = 15.0f; // 单位Hz
-                        break;
-                    default:
-                        break;
-                }
+                ApplyManualFireControl(RC_data[TEMP].mouse.press_l, RC_data[TEMP].key_count[KEY_PRESS][Key_R]);
             } else shoot_cmd_send.load_mode = LOAD_STOP; //停止发射
         } else {
             gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
@@ -627,31 +746,11 @@ static void Keyboard_Cmd(void) {
         }
     }
 
-    switch (RC_data[TEMP].key_count[KEY_PRESS][Key_F] % 2) // F键开关摩擦轮，不受自瞄模式影响
-    {
-        case 0:
-            shoot_cmd_send.friction_mode = FRICTION_OFF;
-            break;
-        default:
-            shoot_cmd_send.friction_mode = FRICTION_ON;
-            break;
-    }
-    switch (RC_data[TEMP].key_count[KEY_PRESS][Key_V] % 4) //V键调整速度
-    {
-        case 0:
-            max_speed = 1000;
-            break;
-        case 1:
-            max_speed = 1500;
-            break;
-        case 2:
-            max_speed = 2000;
-            break;
-        default:
-            max_speed = 2500;
-    }
-    Chassis_Data.speed_target = max_speed;
-    Chassis_Data.UI_reset = VL_data[TEMP].key[KEY_PRESS].z ? true : false;
+    shoot_cmd_send.friction_mode = GetFrictionModeByKeyCount(RC_data[TEMP].key_count[KEY_PRESS][Key_F]);
+    shoot_speed = GetShootSpeedByKeyCount(RC_data[TEMP].key_count[KEY_PRESS][Key_V]);
+    Chassis_Data.superpower_flag = (uint8_t) (RC_data[TEMP].key_count[KEY_PRESS][Key_B] % 2u);
+    Chassis_Data.UI_reset = 0u;
+    UpdateSoftwareResetRequest(RC_data[TEMP].key_count[KEY_PRESS][Key_Z], &last_z_press_count);
 }
 
 // /**
