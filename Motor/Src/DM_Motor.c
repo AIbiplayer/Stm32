@@ -19,6 +19,8 @@
 #include "string.h"
 #include "stdlib.h"
 
+#define DM_MOTOR_ROUND_UNINIT INT32_MIN
+
 static uint8_t Idx = 0; ///< 电机索引
 static uint8_t Setting_Buffer[8] = {0xCC, 0x07, 0x01, 0xDD, 0x00, 0x00, 0x00, 0x00}; ///< 校准数据
 static const float DM_IMU_FILTER_COEF = 0.2f;
@@ -45,6 +47,7 @@ DM_Motor_Instance *DM_Motor_Init(DM_Motor_Init_s *Motor_Init) {
     DM_Motor_Instance *Instance = (DM_Motor_Instance *) malloc(sizeof(DM_Motor_Instance)); //创建动态内存，便于创造实例
     memset(Instance, 0, sizeof(DM_Motor_Instance));
     Instance->Control_Setting = Motor_Init->Control_Setting; //将电机部分内容转移
+    Instance->Measure.round = DM_MOTOR_ROUND_UNINIT;
 
     Instance->id = Motor_Init->Can_Init_Config.tx_id; //电机ID
     Motor_Init->Can_Init_Config.rx_id = 0x300 + Motor_Init->Can_Init_Config.tx_id; //根据协议设置CAN ID
@@ -131,8 +134,23 @@ void Decode_DM_Motor(CANInstance *Instance) {
     const uint8_t *Rx_Buff = Instance->rx_buff;
     DM_Motor_Instance *DM_Instance = Instance->id;
     DM_Motor_Measure_s *Measure = &DM_Instance->Measure;
+    const float last_angle = Measure->angle;
+    float angle_delta;
+
     Measure->ecd = (uint16_t) Rx_Buff[0] << 8 | Rx_Buff[1];
     Measure->angle = ((float) Measure->ecd * ECD_ANGLE_COEF_DJI);
+    angle_delta = Measure->angle - last_angle;
+    if (Measure->round == DM_MOTOR_ROUND_UNINIT) {
+        Measure->round = 0;
+    } else {
+        if (angle_delta > 180.0f) {
+            Measure->round--;
+        } else if (angle_delta < -180.0f) {
+            Measure->round++;
+        }
+    }
+    Measure->round_angle = Measure->angle + 360.0f * (float) Measure->round;
+
     Measure->speed = (int16_t) (Rx_Buff[2] << 8 | Rx_Buff[3]);
     Measure->speed /= 100; // 达妙电机速度单位为rpm，除以100进行换算
     Measure->current = (1.0f - CURRENT_SMOOTH_COEF) * Measure->current +

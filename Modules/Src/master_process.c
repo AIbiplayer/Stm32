@@ -11,6 +11,7 @@
 #include "master_process.h"
 #include "robot_def.h"
 #include "bsp_usb.h"
+#include "daemon.h"
 #include <math.h>
 #include <string.h>
 
@@ -18,6 +19,7 @@ static Vision_Recv_s recv_data; // 接收到的数据
 static Vision_Send_s send_data; // 待发送的数据
 extern USB_Control_t g_usb_dev; // 全局USB设备实例
 
+static DaemonInstance *vision_daemon_instance;
 static volatile uint8_t vision_auto_find = 0;
 static volatile uint8_t vision_mode = 0;
 
@@ -51,8 +53,12 @@ void VisionSetControlState(uint8_t auto_find, uint8_t mode) {
     vision_mode = mode <= 2u ? mode : 0u;
 }
 
-void VisionUpdateRealtimeData(const DM_IMU_Measure_s *imu, int16_t chassis_speed_x_mmps, int16_t chassis_speed_y_mmps,
-                              float dt) {
+uint8_t VisionIsOnline(void) {
+    return vision_daemon_instance != NULL ? DaemonIsOnline(vision_daemon_instance) : 0u;
+}
+
+void VisionUpdateRealtimeData(const DM_IMU_Measure_s *imu, float pitch_up_total_angle,
+                              int16_t chassis_speed_x_mmps, int16_t chassis_speed_y_mmps, float dt) {
     if (imu == NULL) {
         return;
     }
@@ -62,7 +68,7 @@ void VisionUpdateRealtimeData(const DM_IMU_Measure_s *imu, int16_t chassis_speed
     }
 
     send_data.gimbal_data.yaw = imu->Yaw * DEGREE_2_RAD;
-    send_data.gimbal_data.pitch = imu->Pitch * DEGREE_2_RAD;
+    send_data.gimbal_data.pitch = pitch_up_total_angle * DEGREE_2_RAD;
 
     send_data.gimbal_data.speedx = (float) chassis_speed_x_mmps * 0.001f;
     send_data.gimbal_data.speedy = (float) chassis_speed_y_mmps * 0.001f;
@@ -168,13 +174,24 @@ static uint8_t *vis_recv_buff;
 
 static void DecodeVision(uint16_t recv_len) {
     (void) recv_len;
+    if (vision_daemon_instance != NULL) {
+        DaemonReload(vision_daemon_instance);
+    }
     get_protocol_info(vis_recv_buff, &recv_data);
 }
 
 /* 视觉通信初始化 */
 Vision_Recv_s *VisionInit(void) {
-    g_usb_dev.rx_callback = DecodeVision;
+    Daemon_Init_Config_s daemon_conf = {
+        .reload_count = 500u,
+        .init_count = 3000u,
+        .callback = NULL,
+        .owner_id = NULL
+    };
+
+    vision_daemon_instance = DaemonRegister(&daemon_conf);
     vis_recv_buff = g_usb_dev.rx_buffer;
+    g_usb_dev.rx_callback = DecodeVision;
     return &recv_data;
 }
 

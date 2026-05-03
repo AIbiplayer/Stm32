@@ -16,6 +16,7 @@
 #include "master_process.h"
 
 extern INS_t *Gimbal_IMU_Data; ///< 云台IMU数据
+extern DM_Motor_Instance *Gimbal_Pitch_Up; ///< Pitch轴达妙电机小Pitch
 extern CANCommInstance *CANCOM; // 底盘或云台的CAN通信实例指针
 extern referee_info_t *Referee_data; // 裁判系统数据
 
@@ -40,6 +41,7 @@ void INSTask(void const *argument) {
 #ifdef MCU_GIMBAL
         VisionUpdateRealtimeData(
             &DM_IMU.Measure,
+            Gimbal_Pitch_Up != NULL ? Gimbal_Pitch_Up->Measure.total_angle : 0.0f,
             Gimbal_Rec != NULL ? Gimbal_Rec->Shoot_Upload_Data.rec_vx : 0,
             Gimbal_Rec != NULL ? Gimbal_Rec->Shoot_Upload_Data.rec_vy : 0,
             INS_TASK_PERIOD * 0.001f);

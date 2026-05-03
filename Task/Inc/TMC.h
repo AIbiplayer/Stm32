@@ -35,6 +35,7 @@ typedef struct {
     uint8_t isfind_enemy: 1; ///< 视觉是否找到目标
     uint8_t superpower_flag: 1; ///< 是否开启超级电容
     uint8_t reset_flag: 1; ///< 是否复位，1为复位，0为不复位
+    uint8_t vision_flag: 1; ///< 自瞄链路在线标志，1为在线，0为离线
     uint8_t shoot_speed: 5; ///< 发射速度,供底盘判断是否需要进行跟随等控制,单位为m/s
 } TMC_To_Chassis_s; ///< 从云台发送到底盘的控制数据结构体
 

@@ -145,11 +145,12 @@ void CmdTask(void *argument) {
         Chassis_Data.Chassis_Cmd = chassis_cmd_send;
         Chassis_Data.loader_mode = shoot_cmd_send.load_mode;
         Chassis_Data.friction_mode = shoot_cmd_send.friction_mode;
-        Chassis_Data.gimbal_mode = gimbal_cmd_send.gimbal_mode;
+        Chassis_Data.gimbal_mode = gimbal_fetch_data.gimbal_mode;
         Chassis_Data.distance_status = vision_recv_data->enemy_data.distance_status;
         Chassis_Data.isfind_enemy = vision_recv_data->enemy_data.isfind_enemy;
         Chassis_Data.shoot_speed = shoot_speed;
         Chassis_Data.reset_flag = software_reset_pending;
+        Chassis_Data.vision_flag = VisionIsOnline();
 
 #endif
 
@@ -188,7 +189,7 @@ void CmdTask(void *argument) {
         CANCommSend(CANCOM, (uint8_t *) &Gimbal_Data);
 
 #elif defined(MCU_GIMBAL)
-        // CANCommSend(CANCOM, (uint8_t *) &Chassis_Data);
+        CANCommSend(CANCOM, (uint8_t *) &Chassis_Data);
 
         if (software_reset_pending) {
             Chassis_Data.reset_flag = 0u;
@@ -300,7 +301,8 @@ static void Gimbal_Mode_Transition_Handle(void) {
     static gimbal_mode_e last_gimbal_mode = GIMBAL_TIGHTEN;
     static uint16_t release_hold_ticks = 0;
     static float latched_tighten_yaw_target = YAW_TIGHTEN_ANGLE;
-    uint8_t non_tighten_request = gimbal_cmd_send.gimbal_mode != GIMBAL_NONE && gimbal_cmd_send.gimbal_mode != GIMBAL_TIGHTEN;
+    uint8_t non_tighten_request = gimbal_cmd_send.gimbal_mode != GIMBAL_NONE && gimbal_cmd_send.gimbal_mode !=
+                                  GIMBAL_TIGHTEN;
     float current_yaw_reference = gimbal_fetch_data.yaw_motor_offline
                                       ? gimbal_cmd_send.yaw
                                       : gimbal_fetch_data.yaw_motor_total_angle;
@@ -548,18 +550,26 @@ static void VL_keyboard_cmd(void) {
     if (gimbal_cmd_send.gimbal_mode != GIMBAL_TIGHTEN) {
         if (VL_data[TEMP].mouse.mouse_right) //长按鼠标右键进入自瞄模式
         {
+            uint8_t vision_online = VisionIsOnline();
             gimbal_cmd_send.gimbal_mode = GIMBAL_VISION; //只做头部跟随
             chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
-            gimbal_cmd_send.yaw = vision_recv_data->gimbal_data.yaw;
-            gimbal_cmd_send.pitch = vision_recv_data->gimbal_data.pitch;
+            if (vision_online) {
+                gimbal_cmd_send.yaw = vision_recv_data->gimbal_data.yaw;
+                gimbal_cmd_send.pitch = vision_recv_data->gimbal_data.pitch;
+            } else {
+                gimbal_cmd_send.yaw -= (float) VL_data[TEMP].mouse.x / 660 * 2.4f;
+                gimbal_cmd_send.pitch -= (float) VL_data[TEMP].mouse.y / 660 * 1.3f;
+            }
             gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, PITCH_MAX_ANGLE, PITCH_MIN_ANGLE);
-            shoot_cmd_send.shoot_rate = (float) vision_recv_data->gimbal_data.loader_frequency;
-            VisionSetControlState(1u, vision_mode);
-            if (VL_data[TEMP].mouse.mouse_left && vision_recv_data->gimbal_data.fire_flag)
+            if (vision_online) {
+                shoot_cmd_send.shoot_rate = (float) vision_recv_data->gimbal_data.loader_frequency;
+                VisionSetControlState(1u, vision_mode);
+            }
+            if (vision_online && VL_data[TEMP].mouse.mouse_left && vision_recv_data->gimbal_data.fire_flag)
             //鼠标左键短按单发，长按连发，前提是视觉模块的fire_flag为真
             {
                 ApplyManualFireControl(VL_data[TEMP].mouse.mouse_left, VL_data[TEMP].key_count[KEY_PRESS][Key_R]);
-            } else shoot_cmd_send.load_mode = LOAD_STOP; //停止发射
+            } else if (vision_online) shoot_cmd_send.load_mode = LOAD_STOP; //停止发射
         } else {
             gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
             gimbal_cmd_send.yaw -= (float) VL_data[TEMP].mouse.x / 660 * 2.4f; //3.5
@@ -571,7 +581,7 @@ static void VL_keyboard_cmd(void) {
     shoot_cmd_send.friction_mode = GetFrictionModeByKeyCount(VL_data[TEMP].key_count[KEY_PRESS][Key_F]);
     shoot_speed = GetShootSpeedByKeyCount(VL_data[TEMP].key_count[KEY_PRESS][Key_V]);
     Chassis_Data.superpower_flag = (uint8_t) (VL_data[TEMP].key_count[KEY_PRESS][Key_B] % 2u);
-    Chassis_Data.UI_reset = 0u;
+    Chassis_Data.UI_reset = (uint8_t) VL_data[TEMP].key[KEY_PRESS].g;
     UpdateSoftwareResetRequest(VL_data[TEMP].key_count[KEY_PRESS][Key_Z], &last_z_press_count);
 }
 
@@ -631,9 +641,15 @@ static void RemoteControl_Cmd(void) {
     }
     // 视觉模式
     else if (gimbal_cmd_send.gimbal_mode == GIMBAL_VISION) {
+        uint8_t vision_online = VisionIsOnline();
         chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
-        gimbal_cmd_send.yaw = vision_recv_data->gimbal_data.yaw;
-        gimbal_cmd_send.pitch = vision_recv_data->gimbal_data.pitch;
+        if (vision_online) {
+            gimbal_cmd_send.yaw = vision_recv_data->gimbal_data.yaw;
+            gimbal_cmd_send.pitch = vision_recv_data->gimbal_data.pitch;
+        } else {
+            gimbal_cmd_send.yaw -= 0.0008f * (float) RC_data[TEMP].rc.rocker_r_;
+            gimbal_cmd_send.pitch -= 0.0006f * (float) RC_data[TEMP].rc.rocker_r1;
+        }
         gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, PITCH_MAX_ANGLE, PITCH_MIN_ANGLE);
     }
     // 平移速度设置
@@ -726,18 +742,26 @@ static void Keyboard_Cmd(void) {
     if (gimbal_cmd_send.gimbal_mode != GIMBAL_TIGHTEN) {
         if (RC_data[TEMP].mouse.press_r) //长按鼠标右键进入自瞄模式
         {
+            uint8_t vision_online = VisionIsOnline();
             gimbal_cmd_send.gimbal_mode = GIMBAL_VISION; //只做头部跟随
             chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
-            gimbal_cmd_send.yaw = vision_recv_data->gimbal_data.yaw;
-            gimbal_cmd_send.pitch = vision_recv_data->gimbal_data.pitch;
+            if (vision_online) {
+                gimbal_cmd_send.yaw = vision_recv_data->gimbal_data.yaw;
+                gimbal_cmd_send.pitch = vision_recv_data->gimbal_data.pitch;
+            } else {
+                gimbal_cmd_send.yaw -= (float) RC_data[TEMP].mouse.x / 660 * 2.4f;
+                gimbal_cmd_send.pitch -= (float) RC_data[TEMP].mouse.y / 660 * 1.3f;
+            }
             gimbal_cmd_send.pitch = Angle_limit(gimbal_cmd_send.pitch, PITCH_MAX_ANGLE, PITCH_MIN_ANGLE);
-            shoot_cmd_send.shoot_rate = (float) vision_recv_data->gimbal_data.loader_frequency;
-            VisionSetControlState(1u, vision_mode);
-            if (RC_data[TEMP].mouse.press_l && vision_recv_data->gimbal_data.fire_flag)
+            if (vision_online) {
+                shoot_cmd_send.shoot_rate = (float) vision_recv_data->gimbal_data.loader_frequency;
+                VisionSetControlState(1u, vision_mode);
+            }
+            if (vision_online && RC_data[TEMP].mouse.press_l && vision_recv_data->gimbal_data.fire_flag)
             //鼠标左键短按单发，长按连发，前提是视觉模块的fire_flag为真
             {
                 ApplyManualFireControl(RC_data[TEMP].mouse.press_l, RC_data[TEMP].key_count[KEY_PRESS][Key_R]);
-            } else shoot_cmd_send.load_mode = LOAD_STOP; //停止发射
+            } else if (vision_online) shoot_cmd_send.load_mode = LOAD_STOP; //停止发射
         } else {
             gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
             gimbal_cmd_send.yaw -= (float) RC_data[TEMP].mouse.x / 660 * 2.4f; //3.5
@@ -749,7 +773,7 @@ static void Keyboard_Cmd(void) {
     shoot_cmd_send.friction_mode = GetFrictionModeByKeyCount(RC_data[TEMP].key_count[KEY_PRESS][Key_F]);
     shoot_speed = GetShootSpeedByKeyCount(RC_data[TEMP].key_count[KEY_PRESS][Key_V]);
     Chassis_Data.superpower_flag = (uint8_t) (RC_data[TEMP].key_count[KEY_PRESS][Key_B] % 2u);
-    Chassis_Data.UI_reset = 0u;
+    Chassis_Data.UI_reset = (uint8_t) RC_data[TEMP].key[KEY_PRESS].g;
     UpdateSoftwareResetRequest(RC_data[TEMP].key_count[KEY_PRESS][Key_Z], &last_z_press_count);
 }
 

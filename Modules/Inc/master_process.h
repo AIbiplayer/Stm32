@@ -41,14 +41,21 @@ void VisionSetAltitude(float yaw, float pitch);
 void VisionSetControlState(uint8_t auto_find, uint8_t mode);
 
 /**
+ * @brief 获取视觉通信在线状态
+ * @return 1 在线，0 离线
+ */
+uint8_t VisionIsOnline(void);
+
+/**
  * @brief 根据达妙IMU更新实时发送数据
  * @param imu 达妙IMU数据
+ * @param pitch_up_total_angle PITCH_UP电机内部角度,单位deg
  * @param chassis_speed_x_mmps 底盘x向速度,单位mm/s
  * @param chassis_speed_y_mmps 底盘y向速度,单位mm/s
  * @param dt 更新周期,单位s
  */
-void VisionUpdateRealtimeData(const DM_IMU_Measure_s *imu, int16_t chassis_speed_x_mmps, int16_t chassis_speed_y_mmps,
-                              float dt);
+void VisionUpdateRealtimeData(const DM_IMU_Measure_s *imu, float pitch_up_total_angle,
+                              int16_t chassis_speed_x_mmps, int16_t chassis_speed_y_mmps, float dt);
 
 /**
  * @brief 根据发射反馈更新非实时发送数据

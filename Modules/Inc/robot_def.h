@@ -20,20 +20,21 @@
 
 // 云台参数
 #define YAW_ALIGN_ANGLE (YAW_CHASSIS_ALIGN_ECD * ECD_ANGLE_COEF_DJI) // 对齐时的角度,0-360
-#define YAW_CHASSIS_ALIGN_ECD 3140// 云台和底盘对齐指向相同方向时的电机编码器值,若对云台有机械改动需要修改
+#define YAW_CHASSIS_ALIGN_ECD 3049// 云台和底盘对齐指向相同方向时的电机编码器值,若对云台有机械改动需要修改
 #define YAW_RESET_ANGLE YAW_ALIGN_ANGLE // 云台重置时的角度
 #define YAW_ECD_GREATER_THAN_4096 0 // ALIGN_ECD值是否大于4096,是为1,否为0;用于计算云台偏转角度
 #define PITCH_HORIZON_ECD 6614     // 云台处于水平位置时编码器值,若对云台有机械改动需要修改
-#define PITCH_RESET_ANGLE -27.0f // 云台重置时的角度
+#define PITCH_RESET_ANGLE -18.0f // 云台重置时的角度
 #define PITCH_HOLD_RESET_ANGLE 164.0f // 云台重置时的俯仰角,用于发射时保持云台不动,如果云台重置时的俯仰角和PITCH_RESET_ANGLE不同则需要修改
 #define PITCH_HOLD_EXTEND_ANGLE 83.0f // 保持云台不动的俯仰角,如果云台上台阶时的俯仰角和PITCH_RESET_ANGLE不同则需要修改
-#define PITCH_MAX_ANGLE 15.0f           // 云台竖直方向最大角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
-#define PITCH_MIN_ANGLE -25.00f           // 云台竖直方向最小角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
+#define PITCH_MAX_ANGLE 7.0f           // 云台竖直方向最大角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
+#define PITCH_MIN_ANGLE -13.00f           // 云台竖直方向最小角度 (注意反馈如果是陀螺仪，则填写陀螺仪的角度)
 #define PITCH_UP_GRAVITY_COMP_CURRENT 150.0f // Pitch_Up重力补偿电流,单位同达妙输出;实测: 关闭PID或弱PID,在水平附近托住Pitch_Up所需输出,方向不对则取负
 #define PITCH_UP_GRAVITY_COMP_HORIZON_ANGLE 0.0f // Pitch_Up重力补偿水平角,单位deg;实测: DM_IMU.Pitch在机构重力力臂最大的位置
 #define PITCH_UP_FRICTION_COMP_POS_CURRENT 200.0f // Pitch_Up正向摩擦补偿电流;实测: 目标角>实际角时,刚好克服静摩擦开始运动的最小输出,方向不对则取负
 #define PITCH_UP_FRICTION_COMP_NEG_CURRENT 250.0f // Pitch_Up反向摩擦补偿电流;实测: 目标角<实际角时,刚好克服静摩擦开始运动的最小输出,通常和正向不同
 #define PITCH_UP_FRICTION_COMP_DEADBAND 1.5f // Pitch_Up摩擦补偿误差死区,单位deg;误差小于该值时不加摩擦补偿,避免静止保持被推走
+#define PITCH_UP_TRAJECTORY_ANGLE_KP_RATIO (1.0f / 3.0f) // Pitch_Up轨迹规划期间角度环Kp相对初始化Kp的比例
 #define DM_POWER_OUTPUT_FILTER_COEF 0.85f // 达妙最终电流输出一阶低通系数;越小越平滑但响应越慢,1.0f为不过滤
 // 发射参数
 #define SHOOT_COMPENSATION_K 1.5f // 发射补偿系数,用于调节发射速度与距离的关系 todo 具体数值待调试
@@ -249,17 +250,20 @@ typedef struct {
     uint16_t yaw_motor_single_round_angle;
     float yaw_motor_total_angle;
     uint8_t yaw_motor_offline; // 新增：YAW电机离线/停止标志
+    uint8_t gimbal_mode; // 云台实际完成模式，轨迹规划完成后更新
 } Gimbal_Upload_Data_s;
 
 typedef struct {
     uint16_t heat; // 枪口热量
-    uint16_t shooter_heat_limit; // 枪口热量上限，放大1024倍
+    uint16_t shooter_heat_limit; // 枪口热量上限
     uint8_t shooter_barrel_cooling_value; // 枪管冷却值
     uint8_t robot_level; // 机器人等级
     uint8_t reference_online_state; // 参考数据在线状态
     uint8_t robot_color;
     int16_t rec_vx; // 从裁判系统接收的底盘速度数据,单位mm/s
     int16_t rec_vy; // 从裁判系统接收的底盘速度,单位mm/s
+    uint16_t bullet_speed; // 从裁判系统接收的弹速限制,单位m/s，放大1024倍
+
 } Shoot_Upload_Data_s;
 
 #pragma pack() // 开启字节对齐,结束前面的#pragma pack(1)
