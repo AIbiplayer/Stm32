@@ -22,8 +22,6 @@ CCMRAM DJI_Motor_Instance *Gimbal_Yaw; ///<Yaw轴电机
 CCMRAM DM_Motor_Instance *Gimbal_Pitch_Up; ///< Pitch轴达妙电机小Pitch
 CCMRAM DM_Motor_Instance *Gimbal_Pitch_Down; ///<Pitch轴达妙电机大Pitch
 
-extern DM_IMU_Instance_s DM_IMU;
-
 typedef enum {
     YAW_FEEDBACK_MOTOR = 0,
     YAW_FEEDBACK_IMU
@@ -35,8 +33,7 @@ typedef enum {
 } pitch_down_feedback_mode_e;
 
 typedef enum {
-    PITCH_UP_FEEDBACK_IMU = 0,
-    PITCH_UP_FEEDBACK_TOTAL_ANGLE,
+    PITCH_UP_FEEDBACK_TOTAL_ANGLE = 0,
     PITCH_UP_FEEDBACK_ROUND_ANGLE
 } pitch_up_feedback_mode_e;
 
@@ -53,8 +50,8 @@ static float yaw_imu_target_offset;
 static yaw_feedback_mode_e yaw_feedback_mode = YAW_FEEDBACK_MOTOR;
 static float pitch_up_motor_actual_angle;
 static float pitch_up_round_actual_angle;
-static float pitch_up_imu_actual_angle;
-static pitch_up_feedback_mode_e pitch_up_feedback_mode = PITCH_UP_FEEDBACK_IMU;
+static float dif_angle;
+static pitch_up_feedback_mode_e pitch_up_feedback_mode = PITCH_UP_FEEDBACK_ROUND_ANGLE;
 static float pitch_up_angle_kp_init;
 static float pitch_up_gravity_feedforward;
 static float pitch_up_friction_feedforward;
@@ -62,13 +59,9 @@ static float pitch_up_feedforward_total;
 static float pitch_down_motor_actual_angle;
 static float pitch_down_imu_actual_angle;
 static pitch_down_feedback_mode_e pitch_down_feedback_mode = PITCH_DOWN_FEEDBACK_MOTOR;
-
-float PT, PA, PP, PSA, PST; // Pitch轴目标角度和实际角度
-float PAKP = 0, PAKI = 0, PAKD = 0; // Pitch轴角度环PID参数
-float PSKP = 0, PSKI = 0, PSKD = 0;
-float YAKP = 0, YAKI = 0, YAKD = 0, YSKP = 0, YSKI = 0, YSKD = 0;
-float YA, PUA, PDA, YSA, YST, POUT, round1;
-float PU, PD, YT, Yang, PUang, PDang;
+static float gimbal_imu_yaw_total_feedback;
+static float gimbal_imu_yaw_speed_feedback;
+static float gimbal_imu_pitch_feedback;
 
 static void Gimbal_Init(void);
 
@@ -82,19 +75,34 @@ static void Yaw_Switch_To_IMU_Feedback(float cmd_yaw);
 
 static float Yaw_Get_Effective_Target(float cmd_yaw);
 
-static void Pitch_Up_Switch_To_IMU_Feedback(void);
-
 static void Pitch_Up_Switch_To_Motor_Feedback(void);
 
 static void Pitch_Up_Switch_To_Round_Feedback(void);
 
 static float Pitch_Up_Get_Nearest_Round_Target(float round_angle);
 
+static float Pitch_Up_Get_Dif_Target(float pitch_up_round_target, float pitch_down_target);
+
 static void Pitch_Up_Update_Trajectory_Kp(uint8_t trajectory_running);
 
 static void Pitch_Down_Switch_To_Motor_Feedback(void);
 
-static void Pitch_Down_Switch_To_IMU_Feedback(void);
+static void Debug_Change(void);
+
+typedef struct {
+    float Pitch_Up_angle_kp, Pitch_Up_angle_kd, Pitch_Up_speed_kp, Pitch_Up_speed_ki;
+    float Pitch_Down_angle_kp, Pitch_Down_angle_kd, Pitch_Down_speed_kp, Pitch_Down_speed_ki;
+    float Yaw_angle_kp, Yaw_angle_kd, Yaw_speed_kp, Yaw_speed_ki;
+    float Pitch_Up_angle_target, Pitch_Up_speed_target, Pitch_Up_angle_actual, Pitch_Up_speed_actual;
+    float Pitch_Down_angle_target, Pitch_Down_speed_target, Pitch_Down_angle_actual, Pitch_Down_speed_actual;
+    float Yaw_angle_target, Yaw_speed_target, Yaw_angle_actual, Yaw_speed_actual;
+    DM_Motor_Measure_s Pitch_UP, Pitch_Down;
+    DJI_Motor_Measure_s YAW;
+    INS_t IMU;
+    float Pitch_up_out, Pitch_down_out, Yaw_down_out;
+} Gimbal_Debug_s;
+
+volatile Gimbal_Debug_s Debug = {0};
 
 /**
  * @brief 云台任务
@@ -109,42 +117,8 @@ void GimbalTask(void const *argument) {
     for (;;) {
 #ifdef MCU_GIMBAL
         SubGetMessage(gimbal_sub, &gimbal_cmd_recv);
-        YSA = Gimbal_Yaw->Control_Setting.Speed_PID.Actual;
-        YST = Gimbal_Yaw->Control_Setting.Speed_PID.Target;
 
-        PSA = Gimbal_Pitch_Up->Control_Setting.Speed_PID.Actual;
-        PST = Gimbal_Pitch_Up->Control_Setting.Speed_PID.Target;
-
-        YA = Gimbal_Yaw->Control_Setting.Angle_PID.Actual;
-        PUA = Gimbal_Pitch_Up->Control_Setting.Angle_PID.Actual;
-        PDA = Gimbal_Pitch_Down->Control_Setting.Angle_PID.Actual;
-        PU = Gimbal_Pitch_Up->Control_Setting.Target;
-        PD = Gimbal_Pitch_Down->Control_Setting.Target;
-        YT = Gimbal_Yaw->Control_Setting.Target;
-        Yang = Gimbal_Yaw->Measure.Angle;
-        PUang = Gimbal_Pitch_Up->Measure.round_angle;
-        PDang = Gimbal_Pitch_Down->Measure.angle;
-        POUT = Gimbal_Pitch_Up->Control_Setting.Power_Output;
-        round1 = Gimbal_Pitch_Up->Measure.round_angle;
-        // PT = Gimbal_Pitch_Down->Control_Setting.Target;
-        // PA = Gimbal_Pitch_Down->Control_Setting.Angle_PID.Actual;
-        // PSA = Gimbal_Pitch_Down->Control_Setting.Speed_PID.Actual;
-        // PST = Gimbal_Pitch_Down->Control_Setting.Speed_PID.Target;
-        // PP = Gimbal_Pitch_Down->Control_Setting.Power_Output;
-        // YT = Gimbal_Yaw->Control_Setting.Target;
-        // YA = Gimbal_Yaw->Control_Setting.Angle_PID.Actual;
-        // Gimbal_Pitch_Up->Control_Setting.Angle_PID.Kp = PAKP;
-        // Gimbal_Pitch_Up->Control_Setting.Angle_PID.Ki = PAKI;
-        // Gimbal_Pitch_Up->Control_Setting.Angle_PID.Kd = PAKD;
-        // Gimbal_Pitch_Up->Control_Setting.Speed_PID.Kp = PSKP;
-        // Gimbal_Pitch_Up->Control_Setting.Speed_PID.Ki = PSKI;
-        // Gimbal_Pitch_Up->Control_Setting.Speed_PID.Kd = PSKD;
-        // Gimbal_Yaw->Control_Setting.Angle_PID.Kp = YAKP;
-        // Gimbal_Yaw->Control_Setting.Angle_PID.Ki = YAKI;
-        // Gimbal_Yaw->Control_Setting.Angle_PID.Kd = YAKD;
-        // Gimbal_Yaw->Control_Setting.Speed_PID.Kp = YSKP;
-        // Gimbal_Yaw->Control_Setting.Speed_PID.Ki = YSKI;
-        // Gimbal_Yaw->Control_Setting.Speed_PID.Kd = YSKD;
+        Debug_Change();
 
         Gimbal_Status_Serve();
 
@@ -168,8 +142,8 @@ static void Gimbal_Init(void) {
             .Angle_Feedback_Source = MOTOR_FEEDBACK,
             .Speed_Feedback_Source = OTHER_FEEDBACK,
             .Feedforward_Flag = FEEDFORWARD_NONE,
-            .Other_Angle_Feedback_Ptr = &DM_IMU.Measure.YawTotalAngle,
-            .Other_Speed_Feedback_Ptr = &DM_IMU.Measure.Gyro[2],
+            .Other_Angle_Feedback_Ptr = &gimbal_imu_yaw_total_feedback,
+            .Other_Speed_Feedback_Ptr = &gimbal_imu_yaw_speed_feedback,
             .Feedforward_Ptr = NULL
         },
         .Motor_Type = GM6020,
@@ -181,10 +155,10 @@ static void Gimbal_Init(void) {
         .Control_Setting = {
             .Loop_Control = ANGLE_SPEED_CONTROL,
             .Angle_Feedback_Source = OTHER_FEEDBACK,
-            .Speed_Feedback_Source = OTHER_FEEDBACK,
+            .Speed_Feedback_Source = MOTOR_FEEDBACK,
             .Feedforward_Flag = CURRENT_FEEDFORWARD,
-            .Other_Angle_Feedback_Ptr = &DM_IMU.Measure.Pitch,
-            .Other_Speed_Feedback_Ptr = &DM_IMU.Measure.Gyro[1],
+            .Other_Angle_Feedback_Ptr = NULL,
+            .Other_Speed_Feedback_Ptr = NULL,
             .Feedforward_Ptr = &pitch_up_feedforward_total
         }
     };
@@ -203,16 +177,16 @@ static void Gimbal_Init(void) {
     };
 
     PID_Param(&Yaw.Control_Setting.Speed_PID,
-              15.0f,
+              0.0f, //15.0f,
               0.0f,
               0.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
               0,
-              100,
+              1000,
               14000);
     PID_Param(&Yaw.Control_Setting.Angle_PID,
-              150.0f,
+              0.0f, //150.0f,
               0.0f,
               0.0f,
               Integral_Limit | Derivative_On_Measurement,
@@ -221,8 +195,8 @@ static void Gimbal_Init(void) {
               1000,
               14000);
     PID_Param(&Pitch_up.Control_Setting.Speed_PID,
-              -20.0f,
-              0,
+              0.0f, //-20.0f,
+              0.0f,
               0.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
@@ -230,7 +204,7 @@ static void Gimbal_Init(void) {
               1000,
               8000);
     PID_Param(&Pitch_up.Control_Setting.Angle_PID,
-              35.0f,
+              0.0f, //35.0f,
               0.0f,
               0.0f,
               Integral_Limit | Derivative_On_Measurement,
@@ -239,8 +213,8 @@ static void Gimbal_Init(void) {
               1000,
               8000);
     PID_Param(&Pitch_down.Control_Setting.Speed_PID,
-              -40.0f,
-              -0.1f,
+              0.0f, //-40.0f,
+              0.0f, //-0.1f,
               0.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
@@ -248,7 +222,7 @@ static void Gimbal_Init(void) {
               1000,
               8000);
     PID_Param(&Pitch_down.Control_Setting.Angle_PID,
-              30.0f,
+              0.0f, //30.0f,
               0.0f,
               0.0f,
               Integral_Limit | Derivative_On_Measurement,
@@ -258,7 +232,7 @@ static void Gimbal_Init(void) {
               8000);
 
     Daemon_Init_Config_s Yaw_Daemon_Config = {
-        .reload_count = 100, // 100ms超时
+        .reload_count = 200, // 200ms超时
         .init_count = 1000, // 1s上线等待时间
         .callback = DJI_motor_offline, // 可以设置一个回调函数来处理离线情况
     };
@@ -269,15 +243,16 @@ static void Gimbal_Init(void) {
     Pitch_up.Can_Init_Config.tx_id = 1;
     Pitch_up.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Gimbal_Pitch_Up = DM_Motor_Init(&Pitch_up);
+    Pitch_Up_Switch_To_Round_Feedback();
     Pitch_down.Can_Init_Config.tx_id = 2;
     Pitch_down.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Gimbal_Pitch_Down = DM_Motor_Init(&Pitch_down);
     pitch_up_angle_kp_init = Gimbal_Pitch_Up->Control_Setting.Angle_PID.Kp;
     Gimbal_Yaw->Control_Setting.Target = YAW_TIGHTEN_ANGLE;
     Gimbal_Pitch_Down->Control_Setting.Target = PITCH_TIGHTEN_ANGLE;
-    Gimbal_Pitch_Up->Control_Setting.Target = PITCH_HEAD_ANGLE;
+    Gimbal_Pitch_Up->Control_Setting.Target = Pitch_Up_Get_Nearest_Round_Target(Gimbal_Pitch_Up->Measure.round_angle);
 
-    Yaw_Daemon_Config.owner_id = &Gimbal_Yaw;
+    Yaw_Daemon_Config.owner_id = Gimbal_Yaw;
     Gimbal_Yaw->Motor_Can_Instance->daemon_instance = DaemonRegister(&Yaw_Daemon_Config); // 注册守护程序
 
     gimbal_pub = PubRegister("gimbal_feed", sizeof(Gimbal_Upload_Data_s));
@@ -295,7 +270,7 @@ static void Yaw_Switch_To_Motor_Feedback(void) {
 
 static void Yaw_Switch_To_IMU_Feedback(float cmd_yaw) {
     Gimbal_Yaw->Control_Setting.Angle_Feedback_Source = OTHER_FEEDBACK;
-    Gimbal_Yaw->Control_Setting.Other_Angle_Feedback_Ptr = &DM_IMU.Measure.YawTotalAngle;
+    Gimbal_Yaw->Control_Setting.Other_Angle_Feedback_Ptr = &gimbal_imu_yaw_total_feedback;
     yaw_imu_target_offset = yaw_imu_actual_angle - cmd_yaw;
     Gimbal_Yaw->Control_Setting.Target = yaw_imu_actual_angle;
     PID_Clean_I(&Gimbal_Yaw->Control_Setting.Angle_PID);
@@ -309,22 +284,11 @@ static float Yaw_Get_Effective_Target(float cmd_yaw) {
     return cmd_yaw;
 }
 
-static void Pitch_Up_Switch_To_IMU_Feedback(void) {
-    Gimbal_Pitch_Up->Control_Setting.Angle_Feedback_Source = OTHER_FEEDBACK;
-    Gimbal_Pitch_Up->Control_Setting.Speed_Feedback_Source = OTHER_FEEDBACK;
-    Gimbal_Pitch_Up->Control_Setting.Other_Angle_Feedback_Ptr = &DM_IMU.Measure.Pitch;
-    Gimbal_Pitch_Up->Control_Setting.Other_Speed_Feedback_Ptr = &DM_IMU.Measure.Gyro[1];
-    Gimbal_Pitch_Up->Control_Setting.Target = PITCH_RESET_ANGLE;
-    PID_Clean_I(&Gimbal_Pitch_Up->Control_Setting.Angle_PID);
-    PID_Clean_I(&Gimbal_Pitch_Up->Control_Setting.Speed_PID);
-    pitch_up_feedback_mode = PITCH_UP_FEEDBACK_IMU;
-}
-
 static void Pitch_Up_Switch_To_Motor_Feedback(void) {
     Gimbal_Pitch_Up->Control_Setting.Angle_Feedback_Source = MOTOR_FEEDBACK;
-    Gimbal_Pitch_Up->Control_Setting.Speed_Feedback_Source = OTHER_FEEDBACK;
+    Gimbal_Pitch_Up->Control_Setting.Speed_Feedback_Source = MOTOR_FEEDBACK;
     Gimbal_Pitch_Up->Control_Setting.Other_Angle_Feedback_Ptr = NULL;
-    Gimbal_Pitch_Up->Control_Setting.Other_Speed_Feedback_Ptr = &DM_IMU.Measure.Gyro[1];
+    Gimbal_Pitch_Up->Control_Setting.Other_Speed_Feedback_Ptr = NULL;
     Gimbal_Pitch_Up->Control_Setting.Target = pitch_up_motor_actual_angle;
     PID_Clean_I(&Gimbal_Pitch_Up->Control_Setting.Angle_PID);
     PID_Clean_I(&Gimbal_Pitch_Up->Control_Setting.Speed_PID);
@@ -333,9 +297,9 @@ static void Pitch_Up_Switch_To_Motor_Feedback(void) {
 
 static void Pitch_Up_Switch_To_Round_Feedback(void) {
     Gimbal_Pitch_Up->Control_Setting.Angle_Feedback_Source = OTHER_FEEDBACK;
-    Gimbal_Pitch_Up->Control_Setting.Speed_Feedback_Source = OTHER_FEEDBACK;
+    Gimbal_Pitch_Up->Control_Setting.Speed_Feedback_Source = MOTOR_FEEDBACK;
     Gimbal_Pitch_Up->Control_Setting.Other_Angle_Feedback_Ptr = &Gimbal_Pitch_Up->Measure.round_angle;
-    Gimbal_Pitch_Up->Control_Setting.Other_Speed_Feedback_Ptr = &DM_IMU.Measure.Gyro[1];
+    Gimbal_Pitch_Up->Control_Setting.Other_Speed_Feedback_Ptr = NULL;
     Gimbal_Pitch_Up->Control_Setting.Target = Pitch_Up_Get_Nearest_Round_Target(pitch_up_round_actual_angle);
     PID_Clean_I(&Gimbal_Pitch_Up->Control_Setting.Angle_PID);
     PID_Clean_I(&Gimbal_Pitch_Up->Control_Setting.Speed_PID);
@@ -346,6 +310,10 @@ static float Pitch_Up_Get_Nearest_Round_Target(float round_angle) {
     return roundf((round_angle - 5.0f) / GIMBAL_ANGLE_PERIOD) * GIMBAL_ANGLE_PERIOD + 5.0f;
 }
 
+static float Pitch_Up_Get_Dif_Target(float pitch_up_round_target, float pitch_down_target) {
+    return pitch_up_round_target + pitch_down_target - PITCH_HOLD_RESET_ANGLE;
+}
+
 static void Pitch_Up_Update_Trajectory_Kp(uint8_t trajectory_running) {
     Gimbal_Pitch_Up->Control_Setting.Angle_PID.Kp = trajectory_running
                                                         ? pitch_up_angle_kp_init * PITCH_UP_TRAJECTORY_ANGLE_KP_RATIO
@@ -353,15 +321,13 @@ static void Pitch_Up_Update_Trajectory_Kp(uint8_t trajectory_running) {
 }
 
 static void Pitch_Up_Update_Feedforward(void) {
-    float pitch_up_actual_angle = pitch_up_imu_actual_angle;
+    float pitch_up_actual_angle = pitch_up_round_actual_angle;
 
     if (pitch_up_feedback_mode == PITCH_UP_FEEDBACK_TOTAL_ANGLE) {
         pitch_up_actual_angle = pitch_up_motor_actual_angle;
-    } else if (pitch_up_feedback_mode == PITCH_UP_FEEDBACK_ROUND_ANGLE) {
-        pitch_up_actual_angle = pitch_up_round_actual_angle;
     }
 
-    const float angle_offset_rad = (DM_IMU.Measure.Pitch - PITCH_UP_GRAVITY_COMP_HORIZON_ANGLE) * DEGREE_2_RAD;
+    const float angle_offset_rad = (gimbal_imu_pitch_feedback - PITCH_UP_GRAVITY_COMP_HORIZON_ANGLE) * DEGREE_2_RAD;
     const float pitch_up_error = Gimbal_Pitch_Up->Control_Setting.Target - pitch_up_actual_angle;
     pitch_up_gravity_feedforward = PITCH_UP_GRAVITY_COMP_CURRENT * cosf(angle_offset_rad);
     pitch_up_friction_feedforward = 0.0f;
@@ -386,17 +352,6 @@ static void Pitch_Down_Switch_To_Motor_Feedback(void) {
     pitch_down_feedback_mode = PITCH_DOWN_FEEDBACK_MOTOR;
 }
 
-static void Pitch_Down_Switch_To_IMU_Feedback(void) {
-    Gimbal_Pitch_Down->Control_Setting.Angle_Feedback_Source = OTHER_FEEDBACK;
-    Gimbal_Pitch_Down->Control_Setting.Speed_Feedback_Source = OTHER_FEEDBACK;
-    Gimbal_Pitch_Down->Control_Setting.Other_Angle_Feedback_Ptr = &DM_IMU.Measure.Pitch;
-    Gimbal_Pitch_Down->Control_Setting.Other_Speed_Feedback_Ptr = &DM_IMU.Measure.Gyro[1];
-    Gimbal_Pitch_Down->Control_Setting.Target = pitch_down_imu_actual_angle;
-    PID_Clean_I(&Gimbal_Pitch_Down->Control_Setting.Angle_PID);
-    PID_Clean_I(&Gimbal_Pitch_Down->Control_Setting.Speed_PID);
-    pitch_down_feedback_mode = PITCH_DOWN_FEEDBACK_IMU;
-}
-
 /**
  * @brief 云台控制函数
  */
@@ -410,6 +365,12 @@ static void Gimbal_Status_Serve(void) {
     float pitch_up_target_cmd;
     float pitch_up_tighten_round_target;
 
+    if (Gimbal_IMU_Data != NULL) {
+        gimbal_imu_yaw_total_feedback = Gimbal_IMU_Data->YawTotalAngle;
+        gimbal_imu_yaw_speed_feedback = Gimbal_IMU_Data->Gyro[2];
+        gimbal_imu_pitch_feedback = Gimbal_IMU_Data->Pitch;
+    }
+
     if (startup_tighten_latch) {
         if (active_gimbal_mode == GIMBAL_NONE) {
             active_gimbal_mode = GIMBAL_TIGHTEN;
@@ -420,23 +381,20 @@ static void Gimbal_Status_Serve(void) {
 
     pitch_up_target_cmd = Angle_limit(gimbal_cmd_recv.pitch, PITCH_MAX_ANGLE, PITCH_MIN_ANGLE);
     yaw_motor_actual_angle = Gimbal_Yaw->Measure.Total_Angle;
-    yaw_imu_actual_angle = DM_IMU.Measure.YawTotalAngle;
+    yaw_imu_actual_angle = gimbal_imu_yaw_total_feedback;
     pitch_up_motor_actual_angle = Gimbal_Pitch_Up->Measure.total_angle;
     pitch_up_round_actual_angle = Gimbal_Pitch_Up->Measure.round_angle;
     pitch_up_tighten_round_target = Pitch_Up_Get_Nearest_Round_Target(pitch_up_round_actual_angle);
-    pitch_up_imu_actual_angle = DM_IMU.Measure.Pitch;
     pitch_down_motor_actual_angle = Gimbal_Pitch_Down->Measure.angle;
-    pitch_down_imu_actual_angle = DM_IMU.Measure.Pitch;
+    pitch_down_imu_actual_angle = gimbal_imu_pitch_feedback;
     gimbal_actual_pos[GIMBAL_YAW_INDEX] = yaw_feedback_mode == YAW_FEEDBACK_MOTOR
                                               ? yaw_motor_actual_angle
                                               : yaw_imu_actual_angle;
     gimbal_actual_pos[GIMBAL_PITCH_DOWN_INDEX] = pitch_down_motor_actual_angle;
     if (pitch_up_feedback_mode == PITCH_UP_FEEDBACK_TOTAL_ANGLE) {
         gimbal_actual_pos[GIMBAL_PITCH_UP_INDEX] = pitch_up_motor_actual_angle;
-    } else if (pitch_up_feedback_mode == PITCH_UP_FEEDBACK_ROUND_ANGLE) {
-        gimbal_actual_pos[GIMBAL_PITCH_UP_INDEX] = pitch_up_round_actual_angle;
     } else {
-        gimbal_actual_pos[GIMBAL_PITCH_UP_INDEX] = pitch_up_imu_actual_angle;
+        gimbal_actual_pos[GIMBAL_PITCH_UP_INDEX] = pitch_up_round_actual_angle;
     }
 
     if (active_gimbal_mode == GIMBAL_TIGHTEN && yaw_feedback_mode != YAW_FEEDBACK_MOTOR) {
@@ -447,9 +405,9 @@ static void Gimbal_Status_Serve(void) {
         completed_gimbal_mode = GIMBAL_TIGHTEN;
     }
     if (last_gimbal_mode != active_gimbal_mode && active_gimbal_mode != GIMBAL_NONE &&
-        pitch_up_feedback_mode != PITCH_UP_FEEDBACK_IMU) {
-        Pitch_Up_Switch_To_IMU_Feedback();
-        gimbal_actual_pos[GIMBAL_PITCH_UP_INDEX] = pitch_up_imu_actual_angle;
+        pitch_up_feedback_mode != PITCH_UP_FEEDBACK_ROUND_ANGLE) {
+        Pitch_Up_Switch_To_Round_Feedback();
+        gimbal_actual_pos[GIMBAL_PITCH_UP_INDEX] = pitch_up_round_actual_angle;
     }
     if (active_gimbal_mode == GIMBAL_TIGHTEN && pitch_down_feedback_mode != PITCH_DOWN_FEEDBACK_MOTOR) {
         Pitch_Down_Switch_To_Motor_Feedback();
@@ -498,6 +456,8 @@ static void Gimbal_Status_Serve(void) {
             GimbalTrajectory_Update(gimbal_plan_start_pos, active_gimbal_mode);
             GimbalTrajectory_GetTarget(gimbal_target_pos);
             Pitch_Up_Update_Trajectory_Kp(GimbalTrajectory_IsRunning());
+            dif_angle = Pitch_Up_Get_Dif_Target(pitch_up_tighten_round_target,
+                                                gimbal_target_pos[GIMBAL_PITCH_DOWN_INDEX]);
             if ((active_gimbal_mode == GIMBAL_GYRO_MODE || active_gimbal_mode == GIMBAL_VISION) &&
                 yaw_feedback_mode == YAW_FEEDBACK_MOTOR &&
                 GimbalTrajectory_GetState() == GIMBAL_TRAJECTORY_READY) {
@@ -511,30 +471,61 @@ static void Gimbal_Status_Serve(void) {
                     Pitch_Up_Switch_To_Motor_Feedback();
                 }
                 gimbal_target_pos[GIMBAL_PITCH_UP_INDEX] = pitch_up_target_cmd;
-            } else if (active_gimbal_mode == GIMBAL_TIGHTEN &&
-                       GimbalTrajectory_GetState() == GIMBAL_TRAJECTORY_READY) {
+            } else {
                 if (pitch_up_feedback_mode != PITCH_UP_FEEDBACK_ROUND_ANGLE) {
                     Pitch_Up_Switch_To_Round_Feedback();
                 }
-                gimbal_target_pos[GIMBAL_PITCH_UP_INDEX] = pitch_up_tighten_round_target;
+                gimbal_target_pos[GIMBAL_PITCH_UP_INDEX] = dif_angle;
             }
             DJI_MotorSetTarget(Gimbal_Yaw, gimbal_target_pos[GIMBAL_YAW_INDEX]);
             DM_MotorSet(Gimbal_Pitch_Down, gimbal_target_pos[GIMBAL_PITCH_DOWN_INDEX]);
             DM_MotorSet(Gimbal_Pitch_Up, gimbal_target_pos[GIMBAL_PITCH_UP_INDEX]);
             if (active_gimbal_mode == GIMBAL_TIGHTEN &&
                 GimbalTrajectory_GetState() == GIMBAL_TRAJECTORY_READY) {
-                DM_MotorSet(Gimbal_Pitch_Up, pitch_up_tighten_round_target);
+                DM_MotorSet(Gimbal_Pitch_Up, dif_angle);
             }
             Pitch_Up_Update_Feedforward();
             break;
     }
     gimbal_feedback_data.yaw_motor_single_round_angle = (uint16_t) Gimbal_Yaw->Measure.Angle;
     gimbal_feedback_data.yaw_motor_total_angle = yaw_motor_actual_angle;
-    gimbal_feedback_data.gimbal_imu_data = *Gimbal_IMU_Data;
-    gimbal_feedback_data.gimbal_imu_data.Yaw = DM_IMU.Measure.Yaw;
-    gimbal_feedback_data.gimbal_imu_data.Pitch = DM_IMU.Measure.Pitch;
-    gimbal_feedback_data.gimbal_imu_data.YawTotalAngle = DM_IMU.Measure.YawTotalAngle;
+
+    gimbal_feedback_data.pitch_down_total_angle = Gimbal_Pitch_Down->Measure.total_angle;
     gimbal_feedback_data.yaw_motor_offline = yaw_motor_can_offline;
     gimbal_feedback_data.gimbal_mode = (uint8_t) completed_gimbal_mode;
     last_gimbal_mode = active_gimbal_mode;
+}
+
+static void Debug_Change(void) {
+    Debug.Pitch_Down = Gimbal_Pitch_Down->Measure;
+    Debug.Pitch_UP = Gimbal_Pitch_Up->Measure;
+    Debug.YAW = Gimbal_Yaw->Measure;
+    Debug.Pitch_Up_angle_target = Gimbal_Pitch_Up->Control_Setting.Angle_PID.Target;
+    Debug.Pitch_Up_angle_actual = Gimbal_Pitch_Up->Control_Setting.Angle_PID.Actual;
+    Debug.Pitch_Up_speed_target = Gimbal_Pitch_Up->Control_Setting.Speed_PID.Target;
+    Debug.Pitch_Up_speed_actual = Gimbal_Pitch_Up->Control_Setting.Speed_PID.Actual;
+    Debug.Pitch_Down_angle_target = Gimbal_Pitch_Down->Control_Setting.Angle_PID.Target;
+    Debug.Pitch_Down_angle_actual = Gimbal_Pitch_Down->Control_Setting.Angle_PID.Actual;
+    Debug.Pitch_Down_speed_target = Gimbal_Pitch_Down->Control_Setting.Speed_PID.Target;
+    Debug.Pitch_Down_speed_actual = Gimbal_Pitch_Down->Control_Setting.Speed_PID.Actual;
+    Debug.Yaw_angle_target = Gimbal_Yaw->Control_Setting.Angle_PID.Target;
+    Debug.Yaw_angle_actual = Gimbal_Yaw->Control_Setting.Angle_PID.Actual;
+    Debug.Yaw_speed_target = Gimbal_Yaw->Control_Setting.Speed_PID.Target;
+    Debug.Yaw_speed_actual = Gimbal_Yaw->Control_Setting.Speed_PID.Actual;
+    Debug.Pitch_up_out = Gimbal_Pitch_Up->Control_Setting.Power_Output;
+    Debug.Pitch_down_out = Gimbal_Pitch_Down->Control_Setting.Power_Output;
+    Debug.Yaw_down_out = Gimbal_Yaw->Control_Setting.Power_Output;
+
+    Gimbal_Pitch_Up->Control_Setting.Angle_PID.Kp = Debug.Pitch_Up_angle_kp;
+    Gimbal_Pitch_Up->Control_Setting.Angle_PID.Kd = Debug.Pitch_Up_angle_kd;
+    Gimbal_Pitch_Up->Control_Setting.Speed_PID.Kp = Debug.Pitch_Up_speed_kp;
+    Gimbal_Pitch_Up->Control_Setting.Speed_PID.Ki = Debug.Pitch_Up_speed_ki;
+    Gimbal_Pitch_Down->Control_Setting.Angle_PID.Kp = Debug.Pitch_Down_angle_kp;
+    Gimbal_Pitch_Down->Control_Setting.Angle_PID.Kd = Debug.Pitch_Down_angle_kd;
+    Gimbal_Pitch_Down->Control_Setting.Speed_PID.Kp = Debug.Pitch_Down_speed_kp;
+    Gimbal_Pitch_Down->Control_Setting.Speed_PID.Ki = Debug.Pitch_Down_speed_ki;
+    Gimbal_Yaw->Control_Setting.Angle_PID.Kp = Debug.Yaw_angle_kp;
+    Gimbal_Yaw->Control_Setting.Angle_PID.Kd = Debug.Yaw_angle_kd;
+    Gimbal_Yaw->Control_Setting.Speed_PID.Kp = Debug.Yaw_speed_kp;
+    Gimbal_Yaw->Control_Setting.Speed_PID.Ki = Debug.Yaw_speed_ki;
 }

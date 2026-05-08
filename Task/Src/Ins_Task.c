@@ -17,11 +17,12 @@
 
 extern INS_t *Gimbal_IMU_Data; ///< 云台IMU数据
 extern DM_Motor_Instance *Gimbal_Pitch_Up; ///< Pitch轴达妙电机小Pitch
+extern DM_Motor_Instance *Gimbal_Pitch_Down; ///< Pitch轴达妙电机大Pitch
 extern CANCommInstance *CANCOM; // 底盘或云台的CAN通信实例指针
 extern referee_info_t *Referee_data; // 裁判系统数据
 
 TMC_To_Gimbal_s *Gimbal_Rec; // 云台与底盘数据结构体实例
-DM_IMU_Instance_s DM_IMU; // 达妙IMU数据结构体实例
+DM_IMU_Instance_s DM_IMU; // 保留给达妙驱动未使用接口链接，业务逻辑不再读取达妙IMU
 
 static void IMU_Init(void);
 
@@ -40,15 +41,14 @@ void INSTask(void const *argument) {
         DaemonTask();
 #ifdef MCU_GIMBAL
         VisionUpdateRealtimeData(
-            &DM_IMU.Measure,
+            Gimbal_IMU_Data,
             Gimbal_Pitch_Up != NULL ? Gimbal_Pitch_Up->Measure.total_angle : 0.0f,
-            Gimbal_Rec != NULL ? Gimbal_Rec->Shoot_Upload_Data.rec_vx : 0,
-            Gimbal_Rec != NULL ? Gimbal_Rec->Shoot_Upload_Data.rec_vy : 0,
-            INS_TASK_PERIOD * 0.001f);
+            Gimbal_Pitch_Down != NULL ? Gimbal_Pitch_Down->Measure.total_angle : 0.0f);
         VisionUpdateNRTData(
             Gimbal_Rec != NULL ? Gimbal_Rec->Shoot_Upload_Data.heat : 0u,
             Gimbal_Rec != NULL ? Gimbal_Rec->Shoot_Upload_Data.shooter_heat_limit : 0u,
-            Gimbal_Rec != NULL ? Gimbal_Rec->Shoot_Upload_Data.robot_color : 0u);
+            Gimbal_Rec != NULL ? Gimbal_Rec->Shoot_Upload_Data.robot_color : 0u,
+            Gimbal_Rec != NULL ? (float) Gimbal_Rec->Shoot_Upload_Data.bullet_speed / 1024.0f : 0.0f);
         VisionSend();
 
 #endif
@@ -63,14 +63,5 @@ void INSTask(void const *argument) {
 void IMU_Init(void) {
     Gimbal_IMU_Data = INS_Init();
     Gimbal_Rec = (TMC_To_Gimbal_s *) CANCommGet(CANCOM);
-
-    DM_IMU.Can_Init_Config.can_handle = &hcan2;
-    DM_IMU.Can_Init_Config.rx_id = 0x014;
-    DM_IMU.Can_Init_Config.tx_id = 0x010;
-    DM_IMU.Can_Init_Config.id = &DM_IMU;
-    DM_IMU.Can_Init_Config.can_module_callback = Decode_dm_imu;
-
-    DM_IMU.IMU_Can_Instance = CANRegister(&DM_IMU.Can_Init_Config);
-    dm_imu_reset();
     LED_Green_Up;
 }

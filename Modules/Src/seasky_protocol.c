@@ -11,6 +11,8 @@
 #include "crc16.h"
 #include "memory.h"
 
+#define RAD_TO_DEGREE (57.295779513f)
+
 static uint8_t head[100] = {0};
 /*获取CRC8校验码*/
 uint8_t Get_CRC8_Check(uint8_t *pchMessage, uint16_t dwLength) {
@@ -116,8 +118,8 @@ uint16_t get_protocol_info(uint8_t *rx_buf, // 接收到的原始数据
                 if (rx_buf[2 + sizeof(rx_data->gimbal_data)] ==
                     Sum_Check_Sum(rx_buf, 2 + sizeof(rx_data->gimbal_data))) {
                     memcpy(&rx_data->gimbal_data, rx_buf + 2, sizeof(rx_data->gimbal_data));
-                    rx_data->gimbal_data.pitch = rx_data->gimbal_data.pitch * 180 / 3.1415926f;
-                    rx_data->gimbal_data.yaw = rx_data->gimbal_data.yaw * 180 / 3.1415926f;
+                    rx_data->gimbal_data.pitch = rx_data->gimbal_data.pitch * RAD_TO_DEGREE;
+                    rx_data->gimbal_data.yaw = rx_data->gimbal_data.yaw * RAD_TO_DEGREE;
                     get_protocol_info(&rx_buf[3 + sizeof(rx_data->gimbal_data)], rx_data);
                 }
 

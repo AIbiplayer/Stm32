@@ -2,7 +2,7 @@
 #define MASTER_PROCESS_H
 
 #include "bsp_usart.h"
-#include "DM_Motor.h"
+#include "INS.h"
 #include "seasky_protocol.h"
 
 #define VISION_RECV_SIZE 18u // 当前为固定值,36字节
@@ -47,22 +47,20 @@ void VisionSetControlState(uint8_t auto_find, uint8_t mode);
 uint8_t VisionIsOnline(void);
 
 /**
- * @brief 根据达妙IMU更新实时发送数据
- * @param imu 达妙IMU数据
- * @param pitch_up_total_angle PITCH_UP电机内部角度,单位deg
- * @param chassis_speed_x_mmps 底盘x向速度,单位mm/s
- * @param chassis_speed_y_mmps 底盘y向速度,单位mm/s
- * @param dt 更新周期,单位s
+ * @brief 根据云台IMU和pitch电机角度更新实时发送数据
+ * @param imu 云台IMU数据
+ * @param pitch_up_total_angle PITCH_UP电机total_angle,单位deg
+ * @param pitch_down_total_angle PITCH_DOWN电机total_angle,单位deg
  */
-void VisionUpdateRealtimeData(const DM_IMU_Measure_s *imu, float pitch_up_total_angle,
-                              int16_t chassis_speed_x_mmps, int16_t chassis_speed_y_mmps, float dt);
+void VisionUpdateRealtimeData(const INS_t *imu, float pitch_up_total_angle, float pitch_down_total_angle);
 
 /**
  * @brief 根据发射反馈更新非实时发送数据
  * @param heat 当前热量
  * @param shooter_heat_limit 当前热量上限
  * @param robot_color 当前机器人颜色,0红1蓝
+ * @param bullet_speed 实时弹速,单位m/s
  */
-void VisionUpdateNRTData(uint16_t heat, uint16_t shooter_heat_limit, uint8_t robot_color);
+void VisionUpdateNRTData(uint16_t heat, uint16_t shooter_heat_limit, uint8_t robot_color, float bullet_speed);
 
 #endif // !MASTER_PROCESS_H

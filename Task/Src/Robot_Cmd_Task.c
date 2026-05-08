@@ -24,6 +24,7 @@
 #include "master_process.h"
 #include "UI.h"
 #include "ui_queue.h"
+#include <string.h>
 
 CCMRAM RC_ctrl_t *RC_data = NULL; // 遥控器数据,初始化时返回
 CCMRAM VL_ctrl_t *VL_data = NULL; // 图传遥控器数据,初始化时返回
@@ -88,6 +89,8 @@ static void Emergency_Stop(void);
 
 static void CalcOffsetAngle(void);
 
+static float ResolveVisionPitchTarget(void);
+
 static void Robot_Cmd_Serve(void);
 
 static void RemoteControl_Cmd(void);
@@ -112,6 +115,12 @@ static void UpdateSoftwareResetRequest(uint8_t z_press_count, uint8_t *last_z_pr
 
 static void EnforceTightenShootSafety(void);
 
+static void ClearChassisSpeedOnModeSwitch(void);
+
+#ifdef MCU_CHASSIS
+static void Chassis_data_tidy(void);
+#endif
+
 static int16_t GetTightenMouseWz(int16_t mouse_x);
 
 static int16_t GetTightenRockerWz(int16_t rocker_x);
@@ -122,6 +131,10 @@ static int16_t GetTightenRockerWz(int16_t rocker_x);
  * @todo 底盘和云台的USART6波特率不一样！
  */
 void CmdTask(void *argument) {
+#ifdef MCU_GIMBAL
+    uint8_t can_comm_send_count = 0u;
+#endif
+
     taskENTER_CRITICAL();
     DWT_Init(168);
     MX_USB_DEVICE_Init();
@@ -142,6 +155,7 @@ void CmdTask(void *argument) {
         }
 
         EnforceTightenShootSafety();
+        ClearChassisSpeedOnModeSwitch();
         Chassis_Data.Chassis_Cmd = chassis_cmd_send;
         Chassis_Data.loader_mode = shoot_cmd_send.load_mode;
         Chassis_Data.friction_mode = shoot_cmd_send.friction_mode;
@@ -189,7 +203,11 @@ void CmdTask(void *argument) {
         CANCommSend(CANCOM, (uint8_t *) &Gimbal_Data);
 
 #elif defined(MCU_GIMBAL)
-        CANCommSend(CANCOM, (uint8_t *) &Chassis_Data);
+        can_comm_send_count++;
+        if (can_comm_send_count >= 2u || software_reset_pending) {
+            CANCommSend(CANCOM, (uint8_t *) &Chassis_Data);
+            can_comm_send_count = 0u;
+        }
 
         if (software_reset_pending) {
             Chassis_Data.reset_flag = 0u;
@@ -297,6 +315,10 @@ static float GetNearestYawTightenTarget(float current_yaw) {
     return YAW_TIGHTEN_ANGLE + roundf((current_yaw - YAW_TIGHTEN_ANGLE) / GIMBAL_ANGLE_PERIOD) * GIMBAL_ANGLE_PERIOD;
 }
 
+static float ResolveVisionPitchTarget(void) {
+    return vision_recv_data->gimbal_data.pitch + gimbal_fetch_data.pitch_down_total_angle;
+}
+
 static void Gimbal_Mode_Transition_Handle(void) {
     static gimbal_mode_e last_gimbal_mode = GIMBAL_TIGHTEN;
     static uint16_t release_hold_ticks = 0;
@@ -371,6 +393,7 @@ static void ApplyManualFireControl(uint8_t fire_pressed, uint8_t burst_toggle_co
             shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
             break;
     }
+    shoot_cmd_send.shoot_rate = 15.0f; // 固定射速，后续可以改为根据按键次数切换不同射速
 }
 
 static friction_mode_e GetFrictionModeByKeyCount(uint8_t key_count) {
@@ -403,6 +426,50 @@ static void EnforceTightenShootSafety(void) {
         shoot_cmd_send.friction_mode = FRICTION_OFF;
     }
 }
+
+static void ClearChassisSpeedOnModeSwitch(void) {
+    static uint8_t initialized = 0u;
+    static uint8_t last_chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
+    static uint8_t last_gimbal_tighten_state = 1u;
+    uint8_t current_chassis_mode = chassis_cmd_send.chassis_mode;
+    uint8_t current_gimbal_tighten_state = (gimbal_fetch_data.gimbal_mode == GIMBAL_TIGHTEN) ? 1u : 0u;
+
+    if (!initialized) {
+        last_chassis_mode = current_chassis_mode;
+        last_gimbal_tighten_state = current_gimbal_tighten_state;
+        initialized = 1u;
+        return;
+    }
+
+    if (current_chassis_mode != last_chassis_mode || current_gimbal_tighten_state != last_gimbal_tighten_state) {
+        chassis_cmd_send.vx = 0;
+        chassis_cmd_send.vy = 0;
+        chassis_cmd_send.wz = 0;
+    }
+
+    last_chassis_mode = current_chassis_mode;
+    last_gimbal_tighten_state = current_gimbal_tighten_state;
+}
+
+#ifdef MCU_CHASSIS
+static void Chassis_data_tidy(void) {
+    if (Referee_data == NULL) {
+        memset(&Gimbal_Data.Shoot_Upload_Data, 0, sizeof(Gimbal_Data.Shoot_Upload_Data));
+        return;
+    }
+
+    Gimbal_Data.Shoot_Upload_Data.heat = Referee_data->PowerHeatData.shooter_17mm_1_barrel_heat;
+    Gimbal_Data.Shoot_Upload_Data.reference_online_state = Referee_data->referee_online_state;
+    Gimbal_Data.Shoot_Upload_Data.robot_level = Referee_data->GameRobotState.robot_level;
+    Gimbal_Data.Shoot_Upload_Data.shooter_barrel_cooling_value =
+        Referee_data->GameRobotState.shooter_barrel_cooling_value;
+    Gimbal_Data.Shoot_Upload_Data.shooter_heat_limit = Referee_data->GameRobotState.shooter_barrel_heat_limit;
+    Gimbal_Data.Shoot_Upload_Data.robot_color = Referee_data->referee_id.Robot_Color;
+    Gimbal_Data.Shoot_Upload_Data.bullet_speed = (uint16_t) (Referee_data->ShootData.initial_speed * 1024.0f);
+    Gimbal_Data.Shoot_Upload_Data.rec_vx = 0;
+    Gimbal_Data.Shoot_Upload_Data.rec_vy = 0;
+}
+#endif
 
 /**
  * @brief 命令解析
@@ -555,7 +622,7 @@ static void VL_keyboard_cmd(void) {
             chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
             if (vision_online) {
                 gimbal_cmd_send.yaw = vision_recv_data->gimbal_data.yaw;
-                gimbal_cmd_send.pitch = vision_recv_data->gimbal_data.pitch;
+                gimbal_cmd_send.pitch = ResolveVisionPitchTarget();
             } else {
                 gimbal_cmd_send.yaw -= (float) VL_data[TEMP].mouse.x / 660 * 2.4f;
                 gimbal_cmd_send.pitch -= (float) VL_data[TEMP].mouse.y / 660 * 1.3f;
@@ -645,7 +712,7 @@ static void RemoteControl_Cmd(void) {
         chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
         if (vision_online) {
             gimbal_cmd_send.yaw = vision_recv_data->gimbal_data.yaw;
-            gimbal_cmd_send.pitch = vision_recv_data->gimbal_data.pitch;
+            gimbal_cmd_send.pitch = ResolveVisionPitchTarget();
         } else {
             gimbal_cmd_send.yaw -= 0.0008f * (float) RC_data[TEMP].rc.rocker_r_;
             gimbal_cmd_send.pitch -= 0.0006f * (float) RC_data[TEMP].rc.rocker_r1;
@@ -747,7 +814,7 @@ static void Keyboard_Cmd(void) {
             chassis_cmd_send.chassis_mode = CHASSIS_INDEPENDENCE;
             if (vision_online) {
                 gimbal_cmd_send.yaw = vision_recv_data->gimbal_data.yaw;
-                gimbal_cmd_send.pitch = vision_recv_data->gimbal_data.pitch;
+                gimbal_cmd_send.pitch = ResolveVisionPitchTarget();
             } else {
                 gimbal_cmd_send.yaw -= (float) RC_data[TEMP].mouse.x / 660 * 2.4f;
                 gimbal_cmd_send.pitch -= (float) RC_data[TEMP].mouse.y / 660 * 1.3f;

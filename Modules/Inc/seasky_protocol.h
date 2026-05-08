@@ -21,16 +21,14 @@ typedef enum {
 } Tx_Data_type_e;
 
 typedef enum {
-    AIM_OFF = 0,
-    AIM_NORMAL = 1, //常规自瞄
-    AIM_SMALL_ENERGY_BUFF = 2, //小能量机关自瞄
-    AIM_BIG_ENERGY_BUFF = 3, //大能量机关自瞄
+    AIM_NORMAL = 0, //常规自瞄
+    AIM_SMALL_ENERGY_BUFF, //小能量机关自瞄
+    AIM_BIG_ENERGY_BUFF, //大能量机关自瞄
 } Aimbot_Mode_e;
 
 typedef struct {
-    uint8_t reserved_2: 1; //保留位
+    uint8_t reserved_2: 2; //保留位
     uint8_t loader_frequency: 5; //开火频率，单位为发/s
-    uint8_t fire_mode_flag: 1; //发射模式标志位，0 为连发，1为单发
     uint8_t fire_flag: 1; //发射标志位，0为不发射，1为发射
     float yaw; //云台相对于车身的yaw角度，弧度制，范围为- pi ~ pi
     float pitch; //云台相对于车身的pitch角度，弧度制，范围为- pi ~ pi
@@ -38,7 +36,7 @@ typedef struct {
 
 typedef struct {
     uint8_t reserved_1: 6; //保留位
-    uint8_t distance_status: 1; //距离状态，0为距离过远，1为距离正常
+    uint8_t distance_status: 1; //距离状态，0为距离正常
     uint8_t isfind_enemy: 1; //是否找到敌人,0为未找到，1为找到
 } Enemy_Information_Data_s;
 
@@ -48,10 +46,10 @@ typedef struct {
     Enemy_Information_Data_s enemy_data; //上位机发送的敌人信息数据
 } Vision_Recv_s;
 
-
 typedef struct {
     float yaw; //云台相对于车身的yaw角度,- pi ~ pi
-    float pitch; //云台相对于车身的pitch角度，-pi ~ pi
+    float little_pitch; //云台相对于车身的pitch角度，-pi ~ pi
+    float big_pitch; //云台pitch和yaw的差值，-pi ~ pi
     float speedx; //云台x轴速度，单位为m/s
     float speedy; //云台y轴速度，单位为m/s
     float accelx; //云台x轴加速度，单位为m/s^2
@@ -62,7 +60,8 @@ typedef struct {
     uint8_t heat: 4; //当前热量十分比
     uint8_t auto_find: 1; //自动扫描,0为不扫描，1为扫描
     uint8_t my_color: 1; //我方颜色,0为红色，1为蓝色
-    uint8_t mode: 2; //当前模式,0为自瞄，1为小能量机关自瞄，2为大能量机关自瞄
+    uint8_t mode: 2; //当前模式,0为自瞄，1为前哨站自瞄，2为能量机关自瞄
+    float bullet_speed; //子弹速度，单位为m/s
 } Tx_NRT_Data_s; // 非实时数据
 
 typedef struct {

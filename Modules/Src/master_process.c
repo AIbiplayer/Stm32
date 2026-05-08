@@ -21,13 +21,6 @@ extern USB_Control_t g_usb_dev; // 全局USB设备实例
 
 static DaemonInstance *vision_daemon_instance;
 static volatile uint8_t vision_auto_find = 0;
-static volatile uint8_t vision_mode = 0;
-
-static float vision_accel_x_lpf = 0.0f;
-static float vision_accel_y_lpf = 0.0f;
-
-#define VISION_ACCEL_FILTER_TAU 0.03f
-#define VISION_ACCEL_DEADBAND   0.05f
 
 static float ClampFloat(float value, float min_value, float max_value) {
     if (value < min_value) {
@@ -45,40 +38,34 @@ static float DecodeHeatLimit(uint16_t shooter_heat_limit) {
 
 void VisionSetAltitude(float yaw, float pitch) {
     send_data.gimbal_data.yaw = yaw * DEGREE_2_RAD;
-    send_data.gimbal_data.pitch = pitch * DEGREE_2_RAD;
+    send_data.gimbal_data.little_pitch = pitch * DEGREE_2_RAD;
 }
 
 void VisionSetControlState(uint8_t auto_find, uint8_t mode) {
     vision_auto_find = auto_find ? 1u : 0u;
-    vision_mode = mode <= 2u ? mode : 0u;
+    (void) mode;
 }
 
 uint8_t VisionIsOnline(void) {
     return vision_daemon_instance != NULL ? DaemonIsOnline(vision_daemon_instance) : 0u;
 }
 
-void VisionUpdateRealtimeData(const DM_IMU_Measure_s *imu, float pitch_up_total_angle,
-                              int16_t chassis_speed_x_mmps, int16_t chassis_speed_y_mmps, float dt) {
+void VisionUpdateRealtimeData(const INS_t *imu, float pitch_up_total_angle, float pitch_down_total_angle) {
     if (imu == NULL) {
         return;
     }
 
-    if (dt <= 0.0f || dt > 0.02f) {
-        dt = 0.001f;
-    }
-
     send_data.gimbal_data.yaw = imu->Yaw * DEGREE_2_RAD;
-    send_data.gimbal_data.pitch = pitch_up_total_angle * DEGREE_2_RAD;
+    send_data.gimbal_data.little_pitch = (pitch_up_total_angle - pitch_down_total_angle) * DEGREE_2_RAD;
+    send_data.gimbal_data.big_pitch = (imu->Yaw - pitch_down_total_angle) * DEGREE_2_RAD;
 
-    send_data.gimbal_data.speedx = (float) chassis_speed_x_mmps * 0.001f;
-    send_data.gimbal_data.speedy = (float) chassis_speed_y_mmps * 0.001f;
-    vision_accel_x_lpf = 0.0f;
-    vision_accel_y_lpf = 0.0f;
+    send_data.gimbal_data.speedx = 0.0f;
+    send_data.gimbal_data.speedy = 0.0f;
     send_data.gimbal_data.accelx = 0.0f;
     send_data.gimbal_data.accely = 0.0f;
 }
 
-void VisionUpdateNRTData(uint16_t heat, uint16_t shooter_heat_limit, uint8_t robot_color) {
+void VisionUpdateNRTData(uint16_t heat, uint16_t shooter_heat_limit, uint8_t robot_color, float bullet_speed) {
     float heat_ratio = 0.0f;
     float actual_heat_limit = DecodeHeatLimit(shooter_heat_limit);
 
@@ -89,7 +76,8 @@ void VisionUpdateNRTData(uint16_t heat, uint16_t shooter_heat_limit, uint8_t rob
 
     send_data.nrt_data.heat = (uint8_t) ClampFloat(heat_ratio * 10.0f, 0.0f, 15.0f);
     send_data.nrt_data.auto_find = vision_auto_find;
-    send_data.nrt_data.mode = vision_mode;
+    send_data.nrt_data.mode = 0u;
+    send_data.nrt_data.bullet_speed = bullet_speed;
 }
 
 #ifdef VISION_USE_UART
