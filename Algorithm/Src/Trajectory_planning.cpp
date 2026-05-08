@@ -45,9 +45,15 @@ namespace {
         return fabsf(current - target) <= threshold;
     }
 
+    float get_nearest_target(float current_angle, float fixed_angle) {
+        return fixed_angle + roundf((current_angle - fixed_angle) / GIMBAL_ANGLE_PERIOD) * GIMBAL_ANGLE_PERIOD;
+    }
+
     uint8_t is_tighten_pose(const float start_pos[GIMBAL_AXIS_COUNT]) {
         return is_angle_close(start_pos[GIMBAL_PITCH_DOWN_INDEX], PITCH_TIGHTEN_ANGLE, 3.0f) &&
-               is_angle_close(start_pos[GIMBAL_PITCH_UP_INDEX], PITCH_HEAD_ANGLE, 3.0f);
+               is_angle_close(start_pos[GIMBAL_PITCH_UP_INDEX],
+                              get_nearest_target(start_pos[GIMBAL_PITCH_UP_INDEX], PITCH_UP_TIGHTEN_ROUND_ANGLE),
+                              3.0f);
     }
 
     void clear_plan_flag(uint8_t flag[GIMBAL_AXIS_COUNT]) {
@@ -70,10 +76,6 @@ namespace {
             }
         }
         return max_duration;
-    }
-
-    float get_nearest_target(float current_angle, float fixed_angle) {
-        return fixed_angle + roundf((current_angle - fixed_angle) / GIMBAL_ANGLE_PERIOD) * GIMBAL_ANGLE_PERIOD;
     }
 
     float limit_target(const GimbalJointLimit *joint, float target) {
@@ -99,10 +101,10 @@ namespace {
         planner.state = GIMBAL_TRAJECTORY_READY;
         planner.realtime_target[GIMBAL_YAW_INDEX] = YAW_TIGHTEN_ANGLE;
         planner.realtime_target[GIMBAL_PITCH_DOWN_INDEX] = PITCH_HOLD_ANGLE;
-        planner.realtime_target[GIMBAL_PITCH_UP_INDEX] = PITCH_HEAD_ANGLE;
+        planner.realtime_target[GIMBAL_PITCH_UP_INDEX] = PITCH_UP_TIGHTEN_ROUND_ANGLE;
         planner.tighten_target[GIMBAL_YAW_INDEX] = YAW_TIGHTEN_ANGLE;
         planner.tighten_target[GIMBAL_PITCH_DOWN_INDEX] = PITCH_TIGHTEN_ANGLE;
-        planner.tighten_target[GIMBAL_PITCH_UP_INDEX] = PITCH_HEAD_ANGLE;
+        planner.tighten_target[GIMBAL_PITCH_UP_INDEX] = PITCH_UP_TIGHTEN_ROUND_ANGLE;
         planner.first_release_pending = 1;
         planner.initialized = 1;
     }
@@ -116,7 +118,9 @@ namespace {
     void update_tighten_target(const float start_pos[GIMBAL_AXIS_COUNT]) {
         planner.tighten_target[GIMBAL_YAW_INDEX] = get_nearest_target(start_pos[GIMBAL_YAW_INDEX], YAW_TIGHTEN_ANGLE);
         planner.tighten_target[GIMBAL_PITCH_DOWN_INDEX] = PITCH_TIGHTEN_ANGLE;
-        planner.tighten_target[GIMBAL_PITCH_UP_INDEX] = PITCH_HEAD_ANGLE;
+        planner.tighten_target[GIMBAL_PITCH_UP_INDEX] =
+            get_nearest_target(start_pos[GIMBAL_PITCH_UP_INDEX], PITCH_UP_TIGHTEN_ROUND_ANGLE) +
+            start_pos[GIMBAL_PITCH_DOWN_INDEX] - PITCH_TIGHTEN_ANGLE;
     }
 
     void update_direct_target() {

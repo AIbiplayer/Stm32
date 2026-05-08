@@ -50,9 +50,13 @@ static float yaw_imu_target_offset;
 static yaw_feedback_mode_e yaw_feedback_mode = YAW_FEEDBACK_MOTOR;
 static float pitch_up_motor_actual_angle;
 static float pitch_up_round_actual_angle;
+static float pitch_up_tighten_round_target;
+static uint8_t pitch_up_tighten_round_target_locked = 0u;
+static uint8_t pitch_up_total_target_hold = 0u;
+static float pitch_up_total_hold_base;
+static float pitch_up_total_hold_cmd;
 static float dif_angle;
 static pitch_up_feedback_mode_e pitch_up_feedback_mode = PITCH_UP_FEEDBACK_ROUND_ANGLE;
-static float pitch_up_angle_kp_init;
 static float pitch_up_gravity_feedforward;
 static float pitch_up_friction_feedforward;
 static float pitch_up_feedforward_total;
@@ -75,7 +79,7 @@ static void Yaw_Switch_To_IMU_Feedback(float cmd_yaw);
 
 static float Yaw_Get_Effective_Target(float cmd_yaw);
 
-static void Pitch_Up_Switch_To_Motor_Feedback(void);
+static void Pitch_Up_Switch_To_Motor_Feedback(float target);
 
 static void Pitch_Up_Switch_To_Round_Feedback(void);
 
@@ -83,7 +87,7 @@ static float Pitch_Up_Get_Nearest_Round_Target(float round_angle);
 
 static float Pitch_Up_Get_Dif_Target(float pitch_up_round_target, float pitch_down_target);
 
-static void Pitch_Up_Update_Trajectory_Kp(uint8_t trajectory_running);
+static void Yaw_Update_PID_Group(uint8_t use_trajectory_pid);
 
 static void Pitch_Down_Switch_To_Motor_Feedback(void);
 
@@ -177,25 +181,25 @@ static void Gimbal_Init(void) {
     };
 
     PID_Param(&Yaw.Control_Setting.Speed_PID,
-              0.0f, //15.0f,
-              0.0f,
-              0.0f,
+              YAW_NORMAL_SPEED_KP,
+              YAW_NORMAL_SPEED_KI,
+              YAW_NORMAL_SPEED_KD,
               Integral_Limit | Derivative_On_Measurement,
               1,
               0,
               1000,
               14000);
     PID_Param(&Yaw.Control_Setting.Angle_PID,
-              0.0f, //150.0f,
-              0.0f,
-              0.0f,
+              YAW_NORMAL_ANGLE_KP,
+              YAW_NORMAL_ANGLE_KI,
+              YAW_NORMAL_ANGLE_KD,
               Integral_Limit | Derivative_On_Measurement,
               1,
               0,
               1000,
               14000);
     PID_Param(&Pitch_up.Control_Setting.Speed_PID,
-              0.0f, //-20.0f,
+              -20.0f,
               0.0f,
               0.0f,
               Integral_Limit | Derivative_On_Measurement,
@@ -204,7 +208,7 @@ static void Gimbal_Init(void) {
               1000,
               8000);
     PID_Param(&Pitch_up.Control_Setting.Angle_PID,
-              0.0f, //35.0f,
+              25.0f,
               0.0f,
               0.0f,
               Integral_Limit | Derivative_On_Measurement,
@@ -213,8 +217,8 @@ static void Gimbal_Init(void) {
               1000,
               8000);
     PID_Param(&Pitch_down.Control_Setting.Speed_PID,
-              0.0f, //-40.0f,
-              0.0f, //-0.1f,
+              -40.0f,
+              -0.1f,
               0.0f,
               Integral_Limit | Derivative_On_Measurement,
               1,
@@ -222,7 +226,7 @@ static void Gimbal_Init(void) {
               1000,
               8000);
     PID_Param(&Pitch_down.Control_Setting.Angle_PID,
-              0.0f, //30.0f,
+              30.0f, //30.0f,
               0.0f,
               0.0f,
               Integral_Limit | Derivative_On_Measurement,
@@ -247,7 +251,6 @@ static void Gimbal_Init(void) {
     Pitch_down.Can_Init_Config.tx_id = 2;
     Pitch_down.Control_Setting.Reverse_Flag = MOTOR_NORMAL;
     Gimbal_Pitch_Down = DM_Motor_Init(&Pitch_down);
-    pitch_up_angle_kp_init = Gimbal_Pitch_Up->Control_Setting.Angle_PID.Kp;
     Gimbal_Yaw->Control_Setting.Target = YAW_TIGHTEN_ANGLE;
     Gimbal_Pitch_Down->Control_Setting.Target = PITCH_TIGHTEN_ANGLE;
     Gimbal_Pitch_Up->Control_Setting.Target = Pitch_Up_Get_Nearest_Round_Target(Gimbal_Pitch_Up->Measure.round_angle);
@@ -284,12 +287,12 @@ static float Yaw_Get_Effective_Target(float cmd_yaw) {
     return cmd_yaw;
 }
 
-static void Pitch_Up_Switch_To_Motor_Feedback(void) {
+static void Pitch_Up_Switch_To_Motor_Feedback(float target) {
     Gimbal_Pitch_Up->Control_Setting.Angle_Feedback_Source = MOTOR_FEEDBACK;
     Gimbal_Pitch_Up->Control_Setting.Speed_Feedback_Source = MOTOR_FEEDBACK;
     Gimbal_Pitch_Up->Control_Setting.Other_Angle_Feedback_Ptr = NULL;
     Gimbal_Pitch_Up->Control_Setting.Other_Speed_Feedback_Ptr = NULL;
-    Gimbal_Pitch_Up->Control_Setting.Target = pitch_up_motor_actual_angle;
+    Gimbal_Pitch_Up->Control_Setting.Target = target;
     PID_Clean_I(&Gimbal_Pitch_Up->Control_Setting.Angle_PID);
     PID_Clean_I(&Gimbal_Pitch_Up->Control_Setting.Speed_PID);
     pitch_up_feedback_mode = PITCH_UP_FEEDBACK_TOTAL_ANGLE;
@@ -307,17 +310,40 @@ static void Pitch_Up_Switch_To_Round_Feedback(void) {
 }
 
 static float Pitch_Up_Get_Nearest_Round_Target(float round_angle) {
-    return roundf((round_angle - 5.0f) / GIMBAL_ANGLE_PERIOD) * GIMBAL_ANGLE_PERIOD + 5.0f;
+    return roundf((round_angle - PITCH_UP_TIGHTEN_ROUND_ANGLE) / GIMBAL_ANGLE_PERIOD) * GIMBAL_ANGLE_PERIOD +
+           PITCH_UP_TIGHTEN_ROUND_ANGLE;
 }
 
 static float Pitch_Up_Get_Dif_Target(float pitch_up_round_target, float pitch_down_target) {
     return pitch_up_round_target + pitch_down_target - PITCH_HOLD_RESET_ANGLE;
 }
 
-static void Pitch_Up_Update_Trajectory_Kp(uint8_t trajectory_running) {
-    Gimbal_Pitch_Up->Control_Setting.Angle_PID.Kp = trajectory_running
-                                                        ? pitch_up_angle_kp_init * PITCH_UP_TRAJECTORY_ANGLE_KP_RATIO
-                                                        : pitch_up_angle_kp_init;
+static void Yaw_Update_PID_Group(uint8_t use_trajectory_pid) {
+    static uint8_t last_use_trajectory_pid = 0xFFu;
+    PID_Typedef *angle_pid = &Gimbal_Yaw->Control_Setting.Angle_PID;
+    PID_Typedef *speed_pid = &Gimbal_Yaw->Control_Setting.Speed_PID;
+
+    if (use_trajectory_pid) {
+        angle_pid->Kp = YAW_TRAJECTORY_ANGLE_KP;
+        angle_pid->Ki = YAW_TRAJECTORY_ANGLE_KI;
+        angle_pid->Kd = YAW_TRAJECTORY_ANGLE_KD;
+        speed_pid->Kp = YAW_TRAJECTORY_SPEED_KP;
+        speed_pid->Ki = YAW_TRAJECTORY_SPEED_KI;
+        speed_pid->Kd = YAW_TRAJECTORY_SPEED_KD;
+    } else {
+        angle_pid->Kp = YAW_NORMAL_ANGLE_KP;
+        angle_pid->Ki = YAW_NORMAL_ANGLE_KI;
+        angle_pid->Kd = YAW_NORMAL_ANGLE_KD;
+        speed_pid->Kp = YAW_NORMAL_SPEED_KP;
+        speed_pid->Ki = YAW_NORMAL_SPEED_KI;
+        speed_pid->Kd = YAW_NORMAL_SPEED_KD;
+    }
+
+    if (last_use_trajectory_pid != use_trajectory_pid) {
+        PID_Clean_I(angle_pid);
+        PID_Clean_I(speed_pid);
+        last_use_trajectory_pid = use_trajectory_pid;
+    }
 }
 
 static void Pitch_Up_Update_Feedforward(void) {
@@ -363,7 +389,7 @@ static void Gimbal_Status_Serve(void) {
     gimbal_mode_e active_gimbal_mode = gimbal_cmd_recv.gimbal_mode;
     float yaw_target_cmd;
     float pitch_up_target_cmd;
-    float pitch_up_tighten_round_target;
+    uint8_t trajectory_running;
 
     if (Gimbal_IMU_Data != NULL) {
         gimbal_imu_yaw_total_feedback = Gimbal_IMU_Data->YawTotalAngle;
@@ -384,7 +410,9 @@ static void Gimbal_Status_Serve(void) {
     yaw_imu_actual_angle = gimbal_imu_yaw_total_feedback;
     pitch_up_motor_actual_angle = Gimbal_Pitch_Up->Measure.total_angle;
     pitch_up_round_actual_angle = Gimbal_Pitch_Up->Measure.round_angle;
-    pitch_up_tighten_round_target = Pitch_Up_Get_Nearest_Round_Target(pitch_up_round_actual_angle);
+    if (!pitch_up_tighten_round_target_locked) {
+        pitch_up_tighten_round_target = Pitch_Up_Get_Nearest_Round_Target(pitch_up_round_actual_angle);
+    }
     pitch_down_motor_actual_angle = Gimbal_Pitch_Down->Measure.angle;
     pitch_down_imu_actual_angle = gimbal_imu_pitch_feedback;
     gimbal_actual_pos[GIMBAL_YAW_INDEX] = yaw_feedback_mode == YAW_FEEDBACK_MOTOR
@@ -420,6 +448,9 @@ static void Gimbal_Status_Serve(void) {
 
     if (last_gimbal_mode != active_gimbal_mode) {
         gimbal_plan_start_pos[GIMBAL_PITCH_UP_INDEX] = gimbal_actual_pos[GIMBAL_PITCH_UP_INDEX];
+        if (active_gimbal_mode != GIMBAL_NONE) {
+            pitch_up_tighten_round_target_locked = 1u;
+        }
     }
 
     if (last_gimbal_mode == GIMBAL_NONE && active_gimbal_mode != GIMBAL_NONE) {
@@ -433,33 +464,45 @@ static void Gimbal_Status_Serve(void) {
     if (Gimbal_Yaw->Motor_Can_Instance != NULL && Gimbal_Yaw->Motor_Can_Instance->daemon_instance != NULL) {
         yaw_motor_can_offline = !DaemonIsOnline(Gimbal_Yaw->Motor_Can_Instance->daemon_instance);
     }
-
     switch (active_gimbal_mode) {
         case GIMBAL_NONE:
             GimbalTrajectory_Reset();
-            Pitch_Up_Update_Trajectory_Kp(0u);
+            Yaw_Update_PID_Group(startup_tighten_latch);
+            pitch_up_tighten_round_target_locked = 0u;
+            pitch_up_total_target_hold = 0u;
             completed_gimbal_mode = GIMBAL_NONE;
             if (yaw_feedback_mode == YAW_FEEDBACK_IMU) {
                 yaw_imu_target_offset = 0.0f;
             }
-            DJI_MotorSetTarget(Gimbal_Yaw, yaw_feedback_mode == YAW_FEEDBACK_MOTOR
-                                               ? yaw_motor_actual_angle
-                                               : yaw_imu_actual_angle);
+            DJI_MotorSetTarget(Gimbal_Yaw, gimbal_actual_pos[GIMBAL_YAW_INDEX]);
             DJI_MotorStop(Gimbal_Yaw);
             DM_MotorStop();
             break;
         default:
-            DJI_MotorEnable(Gimbal_Yaw);
+            if (yaw_motor_can_offline) {
+                DJI_MotorStop(Gimbal_Yaw);
+            } else {
+                DJI_MotorEnable(Gimbal_Yaw);
+            }
             DM_MotorEnable();
-            yaw_target_cmd = Yaw_Get_Effective_Target(gimbal_cmd_recv.yaw);
+            if (yaw_motor_can_offline) {
+                DJI_MotorSetTarget(Gimbal_Yaw, gimbal_actual_pos[GIMBAL_YAW_INDEX]);
+                yaw_target_cmd = gimbal_actual_pos[GIMBAL_YAW_INDEX];
+                gimbal_plan_start_pos[GIMBAL_YAW_INDEX] = gimbal_actual_pos[GIMBAL_YAW_INDEX];
+            } else {
+                yaw_target_cmd = Yaw_Get_Effective_Target(gimbal_cmd_recv.yaw);
+            }
             GimbalTrajectory_SetRealtimeTarget(yaw_target_cmd, pitch_up_target_cmd);
             GimbalTrajectory_Update(gimbal_plan_start_pos, active_gimbal_mode);
             GimbalTrajectory_GetTarget(gimbal_target_pos);
-            Pitch_Up_Update_Trajectory_Kp(GimbalTrajectory_IsRunning());
+            trajectory_running = GimbalTrajectory_IsRunning();
+            Yaw_Update_PID_Group((uint8_t) (trajectory_running || active_gimbal_mode == GIMBAL_TIGHTEN ||
+                                           startup_tighten_latch));
             dif_angle = Pitch_Up_Get_Dif_Target(pitch_up_tighten_round_target,
                                                 gimbal_target_pos[GIMBAL_PITCH_DOWN_INDEX]);
             if ((active_gimbal_mode == GIMBAL_GYRO_MODE || active_gimbal_mode == GIMBAL_VISION) &&
                 yaw_feedback_mode == YAW_FEEDBACK_MOTOR &&
+                !yaw_motor_can_offline &&
                 GimbalTrajectory_GetState() == GIMBAL_TRAJECTORY_READY) {
                 Yaw_Switch_To_IMU_Feedback(gimbal_cmd_recv.yaw);
                 gimbal_target_pos[GIMBAL_YAW_INDEX] = yaw_imu_actual_angle;
@@ -468,27 +511,48 @@ static void Gimbal_Status_Serve(void) {
                 GimbalTrajectory_GetState() == GIMBAL_TRAJECTORY_READY) {
                 completed_gimbal_mode = active_gimbal_mode;
                 if (pitch_up_feedback_mode != PITCH_UP_FEEDBACK_TOTAL_ANGLE) {
-                    Pitch_Up_Switch_To_Motor_Feedback();
+                    pitch_up_total_hold_base = Angle_limit(pitch_up_motor_actual_angle, PITCH_MAX_ANGLE,
+                                                           PITCH_MIN_ANGLE);
+                    pitch_up_total_hold_cmd = pitch_up_target_cmd;
+                    pitch_up_total_target_hold = 1u;
+                    Pitch_Up_Switch_To_Motor_Feedback(pitch_up_total_hold_base);
+                }
+                if (pitch_up_total_target_hold) {
+                    pitch_up_target_cmd = Angle_limit(pitch_up_total_hold_base +
+                                                      (pitch_up_target_cmd - pitch_up_total_hold_cmd),
+                                                      PITCH_MAX_ANGLE,
+                                                      PITCH_MIN_ANGLE);
                 }
                 gimbal_target_pos[GIMBAL_PITCH_UP_INDEX] = pitch_up_target_cmd;
             } else {
                 if (pitch_up_feedback_mode != PITCH_UP_FEEDBACK_ROUND_ANGLE) {
                     Pitch_Up_Switch_To_Round_Feedback();
                 }
-                gimbal_target_pos[GIMBAL_PITCH_UP_INDEX] = dif_angle;
+                pitch_up_total_target_hold = 0u;
+                if (!(active_gimbal_mode == GIMBAL_TIGHTEN &&
+                      fabsf(gimbal_target_pos[GIMBAL_PITCH_DOWN_INDEX] -
+                            gimbal_plan_start_pos[GIMBAL_PITCH_DOWN_INDEX]) < 1e-3f)) {
+                    gimbal_target_pos[GIMBAL_PITCH_UP_INDEX] = dif_angle;
+                }
             }
-            DJI_MotorSetTarget(Gimbal_Yaw, gimbal_target_pos[GIMBAL_YAW_INDEX]);
+            DJI_MotorSetTarget(Gimbal_Yaw, yaw_motor_can_offline
+                                               ? gimbal_actual_pos[GIMBAL_YAW_INDEX]
+                                               : gimbal_target_pos[GIMBAL_YAW_INDEX]);
             DM_MotorSet(Gimbal_Pitch_Down, gimbal_target_pos[GIMBAL_PITCH_DOWN_INDEX]);
             DM_MotorSet(Gimbal_Pitch_Up, gimbal_target_pos[GIMBAL_PITCH_UP_INDEX]);
             if (active_gimbal_mode == GIMBAL_TIGHTEN &&
                 GimbalTrajectory_GetState() == GIMBAL_TRAJECTORY_READY) {
                 DM_MotorSet(Gimbal_Pitch_Up, dif_angle);
             }
+            if (!trajectory_running) {
+                pitch_up_tighten_round_target_locked = 0u;
+            }
             Pitch_Up_Update_Feedforward();
             break;
     }
     gimbal_feedback_data.yaw_motor_single_round_angle = (uint16_t) Gimbal_Yaw->Measure.Angle;
     gimbal_feedback_data.yaw_motor_total_angle = yaw_motor_actual_angle;
+    gimbal_feedback_data.yaw_target = Gimbal_Yaw->Control_Setting.Target;
 
     gimbal_feedback_data.pitch_down_total_angle = Gimbal_Pitch_Down->Measure.total_angle;
     gimbal_feedback_data.yaw_motor_offline = yaw_motor_can_offline;
@@ -515,17 +579,18 @@ static void Debug_Change(void) {
     Debug.Pitch_up_out = Gimbal_Pitch_Up->Control_Setting.Power_Output;
     Debug.Pitch_down_out = Gimbal_Pitch_Down->Control_Setting.Power_Output;
     Debug.Yaw_down_out = Gimbal_Yaw->Control_Setting.Power_Output;
+    Debug.IMU = *Gimbal_IMU_Data;
 
-    Gimbal_Pitch_Up->Control_Setting.Angle_PID.Kp = Debug.Pitch_Up_angle_kp;
-    Gimbal_Pitch_Up->Control_Setting.Angle_PID.Kd = Debug.Pitch_Up_angle_kd;
-    Gimbal_Pitch_Up->Control_Setting.Speed_PID.Kp = Debug.Pitch_Up_speed_kp;
-    Gimbal_Pitch_Up->Control_Setting.Speed_PID.Ki = Debug.Pitch_Up_speed_ki;
-    Gimbal_Pitch_Down->Control_Setting.Angle_PID.Kp = Debug.Pitch_Down_angle_kp;
-    Gimbal_Pitch_Down->Control_Setting.Angle_PID.Kd = Debug.Pitch_Down_angle_kd;
-    Gimbal_Pitch_Down->Control_Setting.Speed_PID.Kp = Debug.Pitch_Down_speed_kp;
-    Gimbal_Pitch_Down->Control_Setting.Speed_PID.Ki = Debug.Pitch_Down_speed_ki;
-    Gimbal_Yaw->Control_Setting.Angle_PID.Kp = Debug.Yaw_angle_kp;
-    Gimbal_Yaw->Control_Setting.Angle_PID.Kd = Debug.Yaw_angle_kd;
-    Gimbal_Yaw->Control_Setting.Speed_PID.Kp = Debug.Yaw_speed_kp;
-    Gimbal_Yaw->Control_Setting.Speed_PID.Ki = Debug.Yaw_speed_ki;
+    // Gimbal_Pitch_Up->Control_Setting.Angle_PID.Kp = Debug.Pitch_Up_angle_kp;
+    // Gimbal_Pitch_Up->Control_Setting.Angle_PID.Kd = Debug.Pitch_Up_angle_kd;
+    // Gimbal_Pitch_Up->Control_Setting.Speed_PID.Kp = Debug.Pitch_Up_speed_kp;
+    // Gimbal_Pitch_Up->Control_Setting.Speed_PID.Ki = Debug.Pitch_Up_speed_ki;
+    // Gimbal_Pitch_Down->Control_Setting.Angle_PID.Kp = Debug.Pitch_Down_angle_kp;
+    // Gimbal_Pitch_Down->Control_Setting.Angle_PID.Kd = Debug.Pitch_Down_angle_kd;
+    // Gimbal_Pitch_Down->Control_Setting.Speed_PID.Kp = Debug.Pitch_Down_speed_kp;
+    // Gimbal_Pitch_Down->Control_Setting.Speed_PID.Ki = Debug.Pitch_Down_speed_ki;
+    // Gimbal_Yaw->Control_Setting.Angle_PID.Kp = Debug.Yaw_angle_kp;
+    // Gimbal_Yaw->Control_Setting.Angle_PID.Kd = Debug.Yaw_angle_kd;
+    // Gimbal_Yaw->Control_Setting.Speed_PID.Kp = Debug.Yaw_speed_kp;
+    // Gimbal_Yaw->Control_Setting.Speed_PID.Ki = Debug.Yaw_speed_ki;
 }

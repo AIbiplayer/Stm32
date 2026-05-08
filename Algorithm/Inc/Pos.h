@@ -33,8 +33,8 @@ enum Gimbal_axis_index {
 #define PITCH_TIGHTEN_ANGLE PITCH_HOLD_RESET_ANGLE
 #endif
 
-#ifndef PITCH_HEAD_ANGLE
-#define PITCH_HEAD_ANGLE PITCH_RESET_ANGLE
+#ifndef PITCH_UP_TIGHTEN_ROUND_ANGLE
+#define PITCH_UP_TIGHTEN_ROUND_ANGLE 5.0f
 #endif
 
 #ifndef PITCH_UP_MAX_ANGLE
@@ -49,7 +49,7 @@ enum Gimbal_axis_index {
  * 轨迹时间单位均为秒，调用周期默认为 1ms。
  * Yaw/Pitch_Up 先走到缩紧姿态，再允许 Pitch_Down 下压到缩紧角。
  */
-#define YAW_TIGHTEN_DURATION 0.6f
+#define YAW_TIGHTEN_DURATION 1.6f
 #define PITCH_UP_TIGHTEN_DURATION 0.6f
 #define PITCH_DOWN_TIGHTEN_DURATION 1.0f
 #define PITCH_DOWN_RELEASE_DURATION 1.0f

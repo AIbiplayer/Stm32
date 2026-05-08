@@ -151,7 +151,7 @@ void CmdTask(void *argument) {
         Gimbal_Mode_Transition_Handle();
 
         if (gimbal_cmd_send.gimbal_mode == GIMBAL_NONE || gimbal_fetch_data.yaw_motor_offline) {
-            gimbal_cmd_send.yaw = gimbal_fetch_data.gimbal_imu_data.YawTotalAngle;
+            gimbal_cmd_send.yaw = gimbal_fetch_data.yaw_target;
         }
 
         EnforceTightenShootSafety();
@@ -288,7 +288,7 @@ static void Robot_Cmd_Init(void) {
     shoot_feed_sub = SubRegister("shoot_feed", sizeof(Shoot_Upload_Data_s));
     gimbal_cmd_send.gimbal_mode = GIMBAL_TIGHTEN;
     gimbal_cmd_send.yaw = YAW_TIGHTEN_ANGLE;
-    gimbal_cmd_send.pitch = PITCH_HEAD_ANGLE;
+    gimbal_cmd_send.pitch = 0.0f;
 }
 
 /**
@@ -336,7 +336,6 @@ static void Gimbal_Mode_Transition_Handle(void) {
 
     if (gimbal_cmd_send.gimbal_mode == GIMBAL_TIGHTEN) {
         gimbal_cmd_send.yaw = latched_tighten_yaw_target;
-        gimbal_cmd_send.pitch = PITCH_HEAD_ANGLE;
         chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
     } else if (non_tighten_request && last_gimbal_mode == GIMBAL_TIGHTEN && release_hold_ticks == 0u) {
         release_hold_ticks = (uint16_t) (PITCH_DOWN_RELEASE_DURATION * 500.0f) + 20u;
@@ -344,7 +343,6 @@ static void Gimbal_Mode_Transition_Handle(void) {
 
     if (release_hold_ticks > 0 && non_tighten_request) {
         gimbal_cmd_send.yaw = latched_tighten_yaw_target;
-        gimbal_cmd_send.pitch = PITCH_HEAD_ANGLE;
         gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
         release_hold_ticks--;
     }
