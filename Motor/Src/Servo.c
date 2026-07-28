@@ -12,13 +12,12 @@
 /**
  * @brief 初始化舵机
  */
-void Servo_Init(void)
-{
+void Servo_Init(void) {
     HAL_TIM_PWM_Start(&htim9, TIM_CHANNEL_1);
     HAL_TIM_PWM_Start(&htim9, TIM_CHANNEL_2);
 
-    Servo_SetAngle(YAW, 0.0f);//初始化yaw轴为0度
-    Servo_SetAngle(PITCH, 0.0f);//初始化pitch轴为0度
+    // Servo_SetAngle(YAW, 0.0f);//初始化yaw轴为0度
+    // Servo_SetAngle(PITCH, 0.0f);//初始化pitch轴为0度
 }
 
 /**

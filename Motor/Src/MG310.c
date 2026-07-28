@@ -56,6 +56,18 @@ void MG310_Init(void) {
 }
 
 /**
+ * @brief 改变电机PID参数
+ * @param Kp 比例系数
+ * @param Ki 积分系数
+ * @param Kd 微分系数
+ */
+void MG310_ChangePID(float Kp, float Ki, float Kd) {
+    PID_Change(&Motor_PID, Kp, Ki, Kd);
+    for (uint8_t i = 0; i < 4; i++)
+        MG310[i].PID = Motor_PID;
+}
+
+/**
  * @brief PID输出转换为定时器比较值函数
  * @param Output PID输出值
  * @note TIM1的频率为168Mhz，最终范围为2400~12000

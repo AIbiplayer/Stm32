@@ -33,6 +33,12 @@ void PID_Param(PID_Typedef *PID_, const float Kp_, const float Ki_, const float 
     PID_->Max_Output = Max_Output_;
 }
 
+void PID_Change(PID_Typedef *PID_, const float Kp_, const float Ki_, const float Kd_) {
+    PID_->Kp = Kp_;
+    PID_->Ki = Ki_;
+    PID_->Kd = Kd_;
+}
+
 /**
  * @brief PID控制运算
  * @param PID_ 输入结构体

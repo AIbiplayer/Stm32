@@ -47,6 +47,7 @@ typedef struct
     Improvement Improve;
 } PID_Typedef;
 
+void PID_Change(PID_Typedef *PID_, const float Kp_, const float Ki_, const float Kd_);
 void PID_Param(PID_Typedef* PID_, const float Kp_, const float Ki_, const float Kd_, const Improvement Imp_,
                const float DOUT_Filter_, float DeadZone_, float I_Limit_, float Max_Output_);
 float PID_Calculate(PID_Typedef* PID_, float Target_, float Actual_);

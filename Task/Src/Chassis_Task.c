@@ -18,25 +18,12 @@ CCMRAM_DATA Chassis_Instance_s CH_Instance = {
 extern PID_Typedef yaw_pid, pitch_pid;
 extern Motor_Instance_s MG310[4];
 
-float target_angle, current_angle;
-float target_angle, current_angle;
-float pid_output = 0.0f;
-
-float SP1 = 0;
-float SP2 = 0;
-float SP3 = 0;
-float SP4 = 0;
-
 /**
  * @brief 底盘任务函数
  */
 void Chassis_Task(void) {
     Chassis_Behavior();
     MG310_Drive();
-    SP1 = MG310[0].PID.Output;
-    SP2 = MG310[1].PID.Output;
-    SP3 = MG310[2].PID.Output;
-    SP4 = MG310[3].PID.Output;
 }
 
 /**
@@ -87,8 +74,6 @@ void Chassis_Behavior(void) {
  */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
     if (htim == &GAP_TIM) {
-        pitch_pid.Output = PID_Calculate(&pitch_pid, target_angle, current_angle); // pid计算
-        yaw_pid.Output = PID_Calculate(&yaw_pid, target_angle, current_angle); // pid计算
         for (uint8_t i = 0; i < 4; i++) {
             MG310[i].Speed = MG310[i].Motor_GetSpeed(MG310[i].TIMx);
             PID_Calculate(&MG310[i].PID, CH_Instance.Speed_Set[i], MG310[i].Speed);

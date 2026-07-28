@@ -14,9 +14,11 @@
 
 void Uart_printf(UART_HandleTypeDef* huart, char* format, ...);
 void Debug_Chassis(void);
+void Debug_PID(void);
 void Debug_Bluetooth(void);
 void Debug_PS2(void);
 void Debug_Camera(void);
+void Debug_Parse(const uint16_t len);
 void BUZZ_ON(void);
 void BUZZ_OFF(void);
 

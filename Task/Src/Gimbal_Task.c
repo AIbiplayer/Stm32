@@ -11,14 +11,16 @@ extern CCMRAM_DATA Camera_Data_s Cam_Instance; // 摄像头数据实例
  */
 void Gimbal_Task(void) {
     Servo_Init();
-    if (Cam_Instance.Mode == FACE_VISION) //人脸识别只动pitch
-    {
-        auto_tracing(PITCH);
-    } else if (Cam_Instance.Mode == LASER_VISION) //激光避障yaw、pitch都动
-    {
-        auto_tracing(PITCH);
-        auto_tracing(YAW);
-    } else {
-        Servo_Init(); //舵机保持初始化的位置
-    }
+
+    // if (Cam_Instance.Mode == FACE_VISION) //人脸识别只动pitch
+    // {
+    //     auto_tracing(YAW);
+    //     auto_tracing(PITCH);
+    // } else if (Cam_Instance.Mode == LASER_VISION) //激光避障yaw、pitch都动
+    // {
+    //     auto_tracing(PITCH);
+    //     auto_tracing(YAW);
+    // } else if (Cam_Instance.Mode == TRAIL_VISION) //寻迹时均不动
+    // {
+    // }
 }

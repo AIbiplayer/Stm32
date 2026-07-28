@@ -21,6 +21,7 @@
 
 extern char Bluetooth_Receive_Buffer[2][RX_BUFF_SIZE];
 extern char *Buffer_Ptr;
+char Debug_Buffer[RX_BUFF_SIZE / 2];
 extern double pitch_, yaw, roll_; // 角度滤波后数据
 extern Motor_Instance_s MG310[4];
 extern Chassis_Instance_s CH_Instance;
@@ -72,6 +73,8 @@ void Uart_Init(void) {
     __HAL_DMA_DISABLE_IT(UART_BLUETOOTH.hdmarx, DMA_IT_HT);
     HAL_UARTEx_ReceiveToIdle_DMA(&UART_CAMERA, Camera_Receive_Buffer, sizeof(Camera_Receive_Buffer));
     __HAL_DMA_DISABLE_IT(UART_CAMERA.hdmarx, DMA_IT_HT);
+    HAL_UARTEx_ReceiveToIdle_DMA(&UART_DEBUG, (uint8_t *) Debug_Buffer, sizeof(Debug_Buffer));
+    __HAL_DMA_DISABLE_IT(UART_DEBUG.hdmarx, DMA_IT_HT);
 }
 
 /**
@@ -99,6 +102,12 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size) // 串
         Camera_Parse(Size);
         HAL_UARTEx_ReceiveToIdle_DMA(&UART_CAMERA, (uint8_t *) Camera_Receive_Buffer, sizeof(Camera_Receive_Buffer));
         __HAL_DMA_DISABLE_IT(UART_CAMERA.hdmarx, DMA_IT_HT); // 禁用DMA半传输中断，避免进入两次回调
+    }
+    if (huart->Instance == UART_DEBUG.Instance) {
+        HAL_UART_DMAStop(&UART_DEBUG);
+        Debug_Parse(Size);
+        HAL_UARTEx_ReceiveToIdle_DMA(&UART_DEBUG, (uint8_t *) Debug_Buffer, sizeof(Debug_Buffer));
+        __HAL_DMA_DISABLE_IT(UART_DEBUG.hdmarx, DMA_IT_HT); // 禁用DMA半传输中断，避免进入两次回调
     }
 }
 
