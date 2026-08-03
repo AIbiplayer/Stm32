@@ -10,7 +10,6 @@
 #include "Debug_Tool.h"
 #include "Chassis_Task.h"
 #include "usart.h"
-#include "Gimbal_Trace.h"
 #include "ax_ps2.h"
 #include "MG310.h"
 #include "OLED.h"
@@ -27,12 +26,11 @@ extern Motor_Instance_s MG310[4];
 extern Chassis_Instance_s CH_Instance;
 extern JOYSTICK_TypeDef JoystickStruct;
 extern Bluetooth_Data_s BL_Instance; // 蓝牙数据实例
-extern trace_t trace;
 
-CCMRAM_DATA bool Toggle = false; // 切换双缓冲区标志
-CCMRAM_DATA Camera_Data_s Cam_Instance = {NONE_VISION, 1, 0, 0}; // 摄像头数据实例
-CCMRAM_DATA uint8_t Camera_Receive_Buffer[RX_BUFF_SIZE / 8]; // 摄像头接收缓冲区
-CCMRAM_DATA uint8_t Camera_Transmit_Buffer[3] = {0xA4, 0x00, 0x03}; // 摄像头发送缓冲区
+bool Toggle = false; // 切换双缓冲区标志
+Camera_Data_s Cam_Instance = {NONE_VISION, 1, 0, 0}; // 摄像头数据实例
+uint8_t Camera_Receive_Buffer[RX_BUFF_SIZE / 8]; // 摄像头接收缓冲区
+uint8_t Camera_Transmit_Buffer[3] = {0xA4, 0x00, 0x03}; // 摄像头发送缓冲区
 
 static void Camera_Parse(uint8_t len);
 
@@ -43,7 +41,6 @@ void Cmd_Task(void) {
     KalmanFilter();
     AX_PS2_ScanKey();
     Key_Setting();
-    Debug_Camera();
     OLED_SHOW();
     AX_Delayms(30);
 }
@@ -197,23 +194,19 @@ void Key_Setting(void) {
         case FACE_VISION: // 人脸识别
             Camera_Transmit_Buffer[1] = 0x01;
             CH_Instance.Move.x = 0, CH_Instance.Move.y = 0;
-            CH_Instance.Move.w = Cam_Instance.Target_Found ? Cam_Instance.Error_X /2 : 0;
             /* 云台数据接收 */
-            trace.y_distence = Cam_Instance.Target_Found ? Cam_Instance.Error_Y /2 : trace.y_distence; //云台pitch轴误差
             HAL_UART_Transmit_DMA(&UART_CAMERA, Camera_Transmit_Buffer, sizeof(Camera_Transmit_Buffer));
             break;
         case TRAIL_VISION: // 视觉巡线
             Camera_Transmit_Buffer[1] = 0x02;
-            CH_Instance.Move.x = Cam_Instance.Target_Found ? 50 : 0;
+            CH_Instance.Move.x = Cam_Instance.Target_Found ? 40 : 0;
             CH_Instance.Move.y = 0;
-            CH_Instance.Move.w = Cam_Instance.Target_Found ? Cam_Instance.Error_X /2 : 0;
+            CH_Instance.Move.w = Cam_Instance.Target_Found ? Cam_Instance.Error_X : 0;
             HAL_UART_Transmit_DMA(&UART_CAMERA, Camera_Transmit_Buffer, sizeof(Camera_Transmit_Buffer));
             break;
         case LASER_VISION: // 激光避障
             Camera_Transmit_Buffer[1] = 0x03;
             /* 云台数据接收 */
-            trace.x_distence = Cam_Instance.Target_Found ? Cam_Instance.Error_X/2 : trace.x_distence; //云台yaw轴误差
-            trace.y_distence = Cam_Instance.Target_Found ? Cam_Instance.Error_Y/2 : trace.y_distence; //云台pitch轴误差
             HAL_UART_Transmit_DMA(&UART_CAMERA, Camera_Transmit_Buffer, sizeof(Camera_Transmit_Buffer));
             break;
     }

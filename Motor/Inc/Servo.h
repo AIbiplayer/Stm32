@@ -12,10 +12,12 @@
 #include <stdint.h>
 #define YAW 1
 #define PITCH 2
+#define PITCH_CHANNEL TIM_CHANNEL_1
+#define YAW_CHANNEL TIM_CHANNEL_2
 
 void Servo_Init(void);
-void Servo_SetAngle(uint8_t channel, float angle);
-float Servo_GetAngle(uint8_t channel);
-
+void Servo_Set_Auto(void);
+void Servo_Set_Ble(void);
+void Servo_Set_PS2(void);
 #endif
 

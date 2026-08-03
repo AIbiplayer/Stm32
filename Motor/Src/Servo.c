@@ -6,71 +6,89 @@
  * @FilePath: \MDK-ARMe:\keilproject\gimbal_v2.0\Motor\Servo.c
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
-#include "../Inc/Servo.h"
+#include "Servo.h"
+#include "Cmd_Task.h"
 #include "tim.h"
+#include "Bluetooth.h"
+#include "ax_ps2.h"
+#include "stdlib.h"
+
+#define K 25
+extern Camera_Data_s Cam_Instance;
+extern JOYSTICK_TypeDef JoystickStruct;
+extern Bluetooth_Data_s BL_Instance;
+
+static int16_t Y = 500, P = 500;
 
 /**
  * @brief 初始化舵机
  */
 void Servo_Init(void) {
-    HAL_TIM_PWM_Start(&htim9, TIM_CHANNEL_1);
-    HAL_TIM_PWM_Start(&htim9, TIM_CHANNEL_2);
+    HAL_TIM_PWM_Start(&htim9, PITCH_CHANNEL);
+    HAL_TIM_PWM_Start(&htim9, YAW_CHANNEL);
 
-    // Servo_SetAngle(YAW, 0.0f);//初始化yaw轴为0度
-    // Servo_SetAngle(PITCH, 0.0f);//初始化pitch轴为0度
+    __HAL_TIM_SetCompare(&htim9, PITCH_CHANNEL, 500);
+    __HAL_TIM_SetCompare(&htim9, YAW_CHANNEL, 500);
+}
+
+static int16_t Angle_Limit(int16_t angle) {
+    if (angle > 2500)
+        return 2500;
+    else if (angle < 500)
+        return 500;
+    else
+        return angle;
 }
 
 /**
- * @brief 设置舵机角度
- * @param channel 选择是yaw轴还是pitch轴
- * @param angle 舵机角度
+ * @brief 视觉模式下自动设置舵机占空比
  */
-void Servo_SetAngle(uint8_t channel, float angle)
-{
-    switch (channel)
-    {
-        case YAW:
-        /* code */
-            if(angle > 0)
-                __HAL_TIM_SetCompare(&htim9, TIM_CHANNEL_1, angle/135.0f*500.0f+750.0f);
-            else if(angle < 0)
-                __HAL_TIM_SetCompare(&htim9, TIM_CHANNEL_1, 750.0f+angle/135.0f*500.0f);
-            else
-                __HAL_TIM_SetCompare(&htim9, TIM_CHANNEL_1, 750.0f);
-        break;
-        /* code */
-        case PITCH:
-            if(angle > 0)
-                __HAL_TIM_SetCompare(&htim9, TIM_CHANNEL_2, angle/90.0f*500.0f+750.0f);
-            else if(angle < 0)
-                __HAL_TIM_SetCompare(&htim9, TIM_CHANNEL_2, 750.0f+angle/90.0f*500.0f);
-            else
-                __HAL_TIM_SetCompare(&htim9, TIM_CHANNEL_2, 750.0f);
-        break;
+void Servo_Set_Auto(void) {
+    static int16_t P = 1, Y = 1;
+    P += abs(Cam_Instance.Error_Y) * Cam_Instance.Error_Y / 100;
+    P = Angle_Limit(P);
+    Y += abs(Cam_Instance.Error_X) * Cam_Instance.Error_X / 100;
+    Y = Angle_Limit(Y);
+    __HAL_TIM_SetCompare(&htim9, PITCH_CHANNEL, P);
+    __HAL_TIM_SetCompare(&htim9, YAW_CHANNEL, Y);
+}
+
+void Servo_Set_Ble(void) {
+    if (BL_Instance.Rocker_Handle_Data.L1) {
+        Y += K;
+        Y = Angle_Limit(Y);
+        __HAL_TIM_SetCompare(&htim9, YAW_CHANNEL, Y);
+    } else if (BL_Instance.Rocker_Handle_Data.L2) {
+        Y -= K;
+        Y = Angle_Limit(Y);
+        __HAL_TIM_SetCompare(&htim9, YAW_CHANNEL, Y);
+    }
+    if (BL_Instance.Rocker_Handle_Data.R1) {
+        P += K;
+        P = Angle_Limit(P);
+        __HAL_TIM_SetCompare(&htim9, PITCH_CHANNEL, P);
+    } else if (BL_Instance.Rocker_Handle_Data.R2) {
+        P -= K;
+        P = Angle_Limit(P);
+        __HAL_TIM_SetCompare(&htim9, PITCH_CHANNEL, P);
     }
 }
 
-/**
- * @brief 获取舵机角度
- * @param channel 选择是yaw轴还是pitch轴
- */
-float Servo_GetAngle(uint8_t channel)
-{
-    float angle;
-    uint32_t dutyCycle;
-    switch (channel)
-    {
-        case YAW:
-            dutyCycle = __HAL_TIM_GetCompare(&htim9, TIM_CHANNEL_1);
-            angle = (dutyCycle - 750.0f) * 135.0f / 500.0f;
-            break;
-        case PITCH:
-            dutyCycle = __HAL_TIM_GetCompare(&htim9, TIM_CHANNEL_2);
-            angle = (dutyCycle - 750.0f) * 90.0f / 500.0f;
-            break;
-        default:
-            angle = 0.0f; // 默认返回0度
-            break;
+void Servo_Set_PS2(void) {
+    if (JoystickStruct.L1) {
+        Y += K;
+        __HAL_TIM_SetCompare(&htim9, YAW_CHANNEL, Y);
+    } else if (JoystickStruct.L2) {
+        Y -= K;
+        __HAL_TIM_SetCompare(&htim9, YAW_CHANNEL, Y);
     }
-    return angle;
+    if (JoystickStruct.R1) {
+        P += K;
+        P = Angle_Limit(P);
+        __HAL_TIM_SetCompare(&htim9, PITCH_CHANNEL, P);
+    } else if (JoystickStruct.R2) {
+        P -= K;
+        P = Angle_Limit(P);
+        __HAL_TIM_SetCompare(&htim9, PITCH_CHANNEL, P);
+    }
 }

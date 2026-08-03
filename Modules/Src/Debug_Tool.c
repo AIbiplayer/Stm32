@@ -26,6 +26,7 @@ extern Motor_Instance_s MG310[4]; // 电机PID数据
 extern char Debug_Buffer[RX_BUFF_SIZE / 2]; // 调试串口接收缓冲区
 
 static uint8_t Debug_StrToFloat(char *str, float *value);
+
 static uint8_t Debug_ParseValue(char *buf, const char *key, float *value);
 
 /**
@@ -109,19 +110,22 @@ static uint8_t Debug_StrToFloat(char *str, float *value) {
  * @brief 通过UART调试PID参数输出
  */
 void Debug_PID(void) {
-    Uart_printf(&UART_DEBUG, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\r\n",
-                (int)MG310[0].PID.Actual,
-                (int)MG310[0].PID.Target,
-                (int)MG310[0].PID.Output,
-                (int)MG310[1].PID.Actual,
-                (int)MG310[1].PID.Target,
-                (int)MG310[1].PID.Output,
-                (int)MG310[2].PID.Actual,
-                (int)MG310[2].PID.Target,
-                (int)MG310[2].PID.Output,
-                (int)MG310[3].PID.Actual,
-                (int)MG310[3].PID.Target,
-                (int)MG310[3].PID.Output
+    Uart_printf(&UART_DEBUG, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\r\n",
+                (int) MG310[0].PID.Kp,
+                (int) MG310[0].PID.Ki,
+                (int) MG310[0].PID.Kd,
+                (int) MG310[0].PID.Actual,
+                (int) MG310[0].PID.Target,
+                (int) MG310[0].PID.Output,
+                (int) MG310[1].PID.Actual,
+                (int) MG310[1].PID.Target,
+                (int) MG310[1].PID.Output,
+                (int) MG310[2].PID.Actual,
+                (int) MG310[2].PID.Target,
+                (int) MG310[2].PID.Output,
+                (int) MG310[3].PID.Actual,
+                (int) MG310[3].PID.Target,
+                (int) MG310[3].PID.Output
     );
 }
 

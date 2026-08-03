@@ -8,12 +8,11 @@
 #include "MG310.h"
 #include "math.h"
 #include "main.h"
-#include "Debug_Tool.h"
 #include "tim.h"
 
 //电机实例，从0到3依次为ABCD电机
-CCMRAM_DATA Motor_Instance_s MG310[4] = {0};
-CCMRAM_DATA PID_Typedef Motor_PID;
+Motor_Instance_s MG310[4] = {0};
+PID_Typedef Motor_PID;
 
 /**
  * @brief 电机驱动初始化
@@ -140,4 +139,19 @@ void MG310_Drive(void) {
            __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0))
         : (__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (int16_t)-MG310[3].Pulse_Output),
            __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0));
+}
+
+void MG310_Stop(void) {
+    for (uint8_t i = 0; i < 4; i++) {
+        MG310[i].PID.Output = 0;
+        MG310[i].Pulse_Output = 0;
+    }
+    __HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_1, 0);
+    __HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_2, 0);
+    __HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_3, 0);
+    __HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_4, 0);
+    __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, 0);
+    __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_2, 0);
+    __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_3, 0);
+    __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_4, 0);
 }

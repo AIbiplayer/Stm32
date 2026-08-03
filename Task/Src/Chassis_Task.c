@@ -10,20 +10,23 @@
 #include "MG310.h"
 #include "Debug_Tool.h"
 
-CCMRAM_DATA Chassis_Instance_s CH_Instance = {
+Chassis_Instance_s CH_Instance = {
     CHASSIS_MEC, BLUETOOTH_MODE,
     {0, 0, 0}, {0, 0, 0, 0}
 };
 
-extern PID_Typedef yaw_pid, pitch_pid;
 extern Motor_Instance_s MG310[4];
+extern Camera_Data_s Cam_Instance;
 
 /**
  * @brief 底盘任务函数
  */
 void Chassis_Task(void) {
     Chassis_Behavior();
-    MG310_Drive();
+    if (Cam_Instance.Mode != FACE_VISION)
+        MG310_Drive();
+    else
+        MG310_Stop();
 }
 
 /**

@@ -9,9 +9,6 @@
 
 #include "main.h"
 
-#define CCMRAM_CODE __attribute__((section(".ccmram_code")))
-#define CCMRAM_DATA __attribute__((section(".ccmram_data")))
-
 void Uart_printf(UART_HandleTypeDef* huart, char* format, ...);
 void Debug_Chassis(void);
 void Debug_PID(void);

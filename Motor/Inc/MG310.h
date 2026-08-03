@@ -33,6 +33,7 @@ typedef struct
 
 void MG310_Init(void);
 void MG310_Drive(void);
+void MG310_Stop(void);
 void MG310_ChangePID(float Kp, float Ki, float Kd);
 float GetSpeed(TIM_HandleTypeDef* htim);
 

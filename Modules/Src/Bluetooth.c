@@ -17,7 +17,7 @@
 
 char Bluetooth_Receive_Buffer[2][RX_BUFF_SIZE] = {0}; // 蓝牙双缓冲区
 char* Buffer_Ptr = Bluetooth_Receive_Buffer[0]; // 指向当前处理的缓冲区
-CCMRAM_DATA Bluetooth_Data_s BL_Instance = {0}; // 蓝牙数据实例
+Bluetooth_Data_s BL_Instance = {0}; // 蓝牙数据实例
 
 extern Chassis_Instance_s CH_Instance;
 extern Camera_Data_s Cam_Instance;

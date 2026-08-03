@@ -135,7 +135,7 @@ int main(void) {
     /* USER CODE BEGIN WHILE */
     while (1) {
         Cmd_Task();
-        Chassis_Task();
+        // Chassis_Task();
         Gimbal_Task();
 
         /* 以下是各个模块的调试输出， 取消注释即可使用，一次只能使用一个 */
@@ -144,7 +144,6 @@ int main(void) {
         // Debug_PID(); // 调试PID数据输出
         // Debug_Camera();// 调试摄像头数据输出
         // Debug_PS2(); // 调试PS2手柄数据输出
-
 
         /* USER CODE END WHILE */
 
